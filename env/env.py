@@ -1,25 +1,35 @@
+from typing import TypedDict
+
+import numpy as np
+import numpy.typing as npt
 import rlcard
 
-class PokerEnv:
-    def __init__(self):
-        self.env = rlcard.make('no-limit-holdem')
 
-    def reset(self):
-        state = self.env.reset()
+class ProcessedState(TypedDict):
+    obs: npt.NDArray[np.float64]
+    legal_actions: list[int]
+
+
+class PokerEnv:
+    def __init__(self) -> None:
+        self.env: rlcard.envs.Env = rlcard.make("no-limit-holdem")
+
+    def reset(self) -> ProcessedState:
+        state, _ = self.env.reset()
         return self._process(state)
 
-    def step(self, action):
+    def step(self, action: int) -> ProcessedState:
         state, _ = self.env.step(action)
         return self._process(state)
 
-    def _process(self, state):
-        return {
-            "obs": state["obs"],
-            "legal_actions": list(state["legal_actions"].keys())
-        }
+    def _process(self, state: dict[str, object]) -> ProcessedState:
+        return ProcessedState(
+            obs=state["obs"],
+            legal_actions=list(state["legal_actions"].keys()),
+        )
 
-    def is_terminal(self):
+    def is_terminal(self) -> bool:
         return self.env.is_over()
 
-    def get_payoffs(self):
+    def get_payoffs(self) -> npt.NDArray[np.float64]:
         return self.env.get_payoffs()
