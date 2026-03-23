@@ -10,7 +10,7 @@ from agents.cfr_agent import CFRAgent  # noqa: E402
 
 MODEL_DIR = str(ROOT / "models" / "cfr")
 TOTAL_ITERATIONS = 100_000
-CHECKPOINT_EVERY = 1000
+CHECKPOINT_EVERY = 5
 
 print(
     f"Training CFR for {TOTAL_ITERATIONS} iterations, saving every {CHECKPOINT_EVERY}"
