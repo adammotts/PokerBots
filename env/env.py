@@ -6,8 +6,11 @@ from env.processed_state import ProcessedState
 
 
 class PokerEnv:
-    def __init__(self) -> None:
-        self.env: rlcard.envs.Env = rlcard.make("limit-holdem")
+    def __init__(self, *, allow_step_back: bool = False) -> None:
+        self.env: rlcard.envs.Env = rlcard.make(
+            "limit-holdem",
+            {"allow_step_back": allow_step_back},
+        )
 
     def reset(self) -> ProcessedState:
         state, _ = self.env.reset()
