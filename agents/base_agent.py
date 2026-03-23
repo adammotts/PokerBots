@@ -1,17 +1,36 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from typing import TypedDict
+
+import numpy as np
+import numpy.typing as npt
+
+
+class Transition(TypedDict):
+    obs: npt.NDArray[np.float64]
+    action: int
+    reward: float
+    next_obs: npt.NDArray[np.float64]
+    done: bool
+
 
 class BaseAgent(ABC):
-    def act(self, obs, legal_actions, training=True):
-        raise NotImplementedError
+    @abstractmethod
+    def act(
+        self,
+        obs: npt.NDArray[np.float64],
+        legal_actions: list[int],
+        *,
+        training: bool = True,
+    ) -> int: ...
 
-    def observe(self, transition):
-        pass
+    @abstractmethod
+    def observe(self, transition: Transition) -> None: ...
 
-    def update(self):
-        pass
+    @abstractmethod
+    def update(self) -> None: ...
 
-    def save(self, path):
-        pass
+    @abstractmethod
+    def save(self, path: str) -> None: ...
 
-    def load(self, path):
-        pass
+    @abstractmethod
+    def load(self, path: str) -> None: ...
