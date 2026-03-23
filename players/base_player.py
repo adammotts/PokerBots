@@ -1,5 +1,13 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+
+from env.processed_state import ProcessedState
+
 
 class BasePlayer(ABC):
-    def act(self, obs, legal_actions):
-        raise NotImplementedError
+    @abstractmethod
+    def act(self, state: ProcessedState) -> int:
+        pass
+
+    @abstractmethod
+    def reset(self) -> None:
+        pass
