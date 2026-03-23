@@ -12,7 +12,7 @@ class ProcessedState(TypedDict):
 
 class PokerEnv:
     def __init__(self) -> None:
-        self.env: rlcard.envs.Env = rlcard.make("no-limit-holdem")
+        self.env: rlcard.envs.Env = rlcard.make("limit-holdem")
 
     def reset(self) -> ProcessedState:
         state, _ = self.env.reset()
