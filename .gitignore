@@ -26,6 +26,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
+# Model internals (tracked as models.tar.gz instead)
+models
+
 # Misc
 .DS_Store
 *.log

@@ -17,8 +17,15 @@ print(
 )
 
 agent = CFRAgent(model_path=MODEL_DIR, iterations=1)
-for i in trange(TOTAL_ITERATIONS, desc="CFR Training"):
+agent.load(MODEL_DIR)
+start = agent._cfr.iteration
+if start > 0:
+    print(f"Resuming from {start} existing iterations")
+remaining = TOTAL_ITERATIONS - start
+
+for _ in trange(remaining, initial=start, total=TOTAL_ITERATIONS,
+                desc="CFR Training"):
     agent.update()
-    if i % CHECKPOINT_EVERY == 0 and i > 0:
+    if agent._cfr.iteration % CHECKPOINT_EVERY == 0:
         agent.save(MODEL_DIR)
-        tqdm.write(f"Checkpoint saved at iteration {i}")
+        tqdm.write(f"Checkpoint saved at iteration {agent._cfr.iteration}")

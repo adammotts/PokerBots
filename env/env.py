@@ -24,6 +24,7 @@ class PokerEnv:
         return ProcessedState(
             obs=state["obs"],
             legal_actions=list(state["legal_actions"].keys()),
+            raw_obs=state["raw_obs"],
         )
 
     def is_terminal(self) -> bool:
