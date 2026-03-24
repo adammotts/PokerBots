@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr evaluate pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -87,6 +87,10 @@ train-cfr: ## Train RLCard CFR agent
 train-openspiel-cfr: ## Train OpenSpiel MCCFR agent
 	@printf "$(BLUE)Starting OpenSpiel MCCFR training...\n$(NC)\n"
 	@uv run python scripts/train_openspiel_cfr.py
+
+evaluate: ## Evaluate agent vs opponent (10k hands, plots to results/)
+	@printf "$(BLUE)Running evaluation...\n$(NC)\n"
+	@uv run python scripts/evaluate.py
 
 pack-models: ## Compress models/ into models.tar.gz for git
 	@printf "$(BLUE)Packing models...\n$(NC)"

@@ -33,6 +33,9 @@ class CFRAgent(BaseAgent):
         legal_actions: list[int],
         *,
         training: bool = True,
+        raw_obs: dict[str, object] | None = None,
+        action_record: list[tuple[int, str]] | None = None,
+        player_id: int = 0,
     ) -> int:
         state: dict[str, object] = {
             "obs": obs,

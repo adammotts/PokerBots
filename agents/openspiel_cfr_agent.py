@@ -16,7 +16,7 @@ _GAME_PARAMS = {
     "blind": "10 5",
     "raiseSize": "10 10 20 20",
     "firstPlayer": "2 1 1 1",
-    "maxRaises": "3 4 4 4",
+    "maxRaises": "4 4 4 4",
     "numSuits": 4,
     "numRanks": 13,
     "numHoleCards": 2,
@@ -32,6 +32,10 @@ _SUIT_TO_IDX = {"C": 0, "D": 1, "H": 2, "S": 3}
 
 # OpenSpiel action IDs: 0=fold, 1=call/check, 2=raise/bet
 _RLCARD_ACTION_TO_OS = {"fold": 0, "call": 1, "check": 1, "raise": 2}
+
+# RLCard action IDs: 0=call, 1=raise, 2=fold, 3=check
+# Map OpenSpiel action → RLCard action(s)
+_OS_TO_RLCARD = {0: [2], 1: [0, 3], 2: [1]}  # OS call/check maps to both
 
 
 def _rlcard_card_to_os_action(card: str) -> int:
@@ -63,6 +67,7 @@ class OpenSpielCFRAgent(BaseAgent):
         training: bool = True,
         raw_obs: dict[str, object] | None = None,
         action_record: list[tuple[int, str]] | None = None,
+        player_id: int = 0,
     ) -> int:
         if raw_obs is None:
             return int(np.random.choice(legal_actions))
@@ -70,16 +75,22 @@ class OpenSpielCFRAgent(BaseAgent):
         if self._avg_policy is None:
             self._avg_policy = self._solver.average_policy()
 
-        os_state = self._build_info_state(raw_obs, action_record or [])
-        probs = self._avg_policy.action_probabilities(os_state)
+        os_state = self._build_info_state(raw_obs, action_record or [], player_id)
+        try:
+            probs = self._avg_policy.action_probabilities(os_state)
+        except (IndexError, KeyError, pyspiel.SpielError):
+            return int(np.random.choice(legal_actions))
 
-        # Map OpenSpiel action probs → RLCard legal action probs
-        prob_array = np.zeros(3)
+        # Map OpenSpiel action probs → RLCard 4-action space
+        legal_set = set(legal_actions)
+        prob_array = np.zeros(4)
         for os_action, prob in probs.items():
-            prob_array[os_action] = prob
+            for rl_action in _OS_TO_RLCARD[os_action]:
+                if rl_action in legal_set:
+                    prob_array[rl_action] += prob
 
         # Zero out illegal actions and renormalize
-        mask = np.zeros(3)
+        mask = np.zeros(4)
         for a in legal_actions:
             mask[a] = 1.0
         prob_array *= mask
@@ -89,7 +100,7 @@ class OpenSpielCFRAgent(BaseAgent):
         else:
             prob_array[legal_actions] = 1.0 / len(legal_actions)
 
-        return int(np.random.choice(3, p=prob_array))
+        return int(np.random.choice(4, p=prob_array))
 
     def observe(self, transition: Transition) -> None:
         pass
@@ -123,6 +134,7 @@ class OpenSpielCFRAgent(BaseAgent):
         self,
         raw_obs: dict[str, object],
         action_record: list[tuple[int, str]],
+        player_id: int = 0,
     ) -> pyspiel.State:
         """Reconstruct an OpenSpiel State from RLCard state.
 
@@ -133,7 +145,6 @@ class OpenSpielCFRAgent(BaseAgent):
         """
         state = self._game.new_initial_state()
 
-        # Our hole cards
         our_cards = [_rlcard_card_to_os_action(c) for c in raw_obs["hand"]]
         public_cards = [
             _rlcard_card_to_os_action(c) for c in raw_obs["public_cards"]
@@ -143,9 +154,13 @@ class OpenSpielCFRAgent(BaseAgent):
         # Pick 2 dummy cards for the opponent (any unused cards)
         dummy_opp = [i for i in range(52) if i not in used][:2]
 
-        # Deal order: P0 hand, P1 hand, then public cards between rounds
-        # Preflop: deal P0-c1, P0-c2, P1-c1, P1-c2
-        for card_action in our_cards + dummy_opp:
+        # Deal order: P0-c1, P0-c2, P1-c1, P1-c2
+        if player_id == 0:
+            deal_order = our_cards + dummy_opp
+        else:
+            deal_order = dummy_opp + our_cards
+
+        for card_action in deal_order:
             state.apply_action(card_action)
 
         # Replay action history, dealing community cards between rounds
@@ -158,6 +173,9 @@ class OpenSpielCFRAgent(BaseAgent):
                     public_idx += 1
                 else:
                     break
+            elif state.current_player() < 0:
+                # Terminal or chance — stop
+                break
             elif action_idx < len(action_record):
                 _, action_str = action_record[action_idx]
                 action_idx += 1

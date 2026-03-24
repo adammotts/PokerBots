@@ -13,18 +13,19 @@ class PokerEnv:
         )
 
     def reset(self) -> ProcessedState:
-        state, _ = self.env.reset()
-        return self._process(state)
+        state, player_id = self.env.reset()
+        return self._process(state, player_id)
 
     def step(self, action: int) -> ProcessedState:
-        state, _ = self.env.step(action)
-        return self._process(state)
+        state, player_id = self.env.step(action)
+        return self._process(state, player_id)
 
-    def _process(self, state: dict[str, object]) -> ProcessedState:
+    def _process(self, state: dict[str, object], player_id: int) -> ProcessedState:
         return ProcessedState(
             obs=state["obs"],
             legal_actions=list(state["legal_actions"].keys()),
             raw_obs=state["raw_obs"],
+            player_id=player_id,
         )
 
     def is_terminal(self) -> bool:
