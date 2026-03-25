@@ -113,21 +113,39 @@ class OpenSpielCFRAgent(BaseAgent):
 
     def save(self, path: str) -> None:
         os.makedirs(path, exist_ok=True)
-        data = {
-            "info_sets": self._solver._infostates,
-            "total_iterations": self.total_iterations,
-        }
-        with open(os.path.join(path, "openspiel_cfr.pkl"), "wb") as f:
-            pickle.dump(data, f)
+        final = os.path.join(path, "openspiel_cfr.pkl")
+        tmp = final + ".tmp"
+        with open(tmp, "wb") as f:
+            p = pickle.Pickler(f, protocol=pickle.HIGHEST_PROTOCOL)
+            # fast=True disables pickle's memo dict (cycle detection/deduplication).
+            # For millions of infostates the memo alone can consume several GB of RAM,
+            # causing OOM on save. Infostates have no shared references so this is safe.
+            p.fast = True
+            p.dump(self.total_iterations)
+            for key, val in self._solver._infostates.items():
+                p.dump((key, val))
+            p.dump(None)  # sentinel marks end of stream
+        os.replace(tmp, final)  # atomic on Linux (rename syscall)
 
     def load(self, path: str) -> None:
         pkl = os.path.join(path, "openspiel_cfr.pkl")
         if not os.path.exists(pkl):
             return
-        with open(pkl, "rb") as f:
-            data: dict[str, object] = pickle.load(f)  # noqa: S301
-        self._solver._infostates = data["info_sets"]
-        self.total_iterations = data["total_iterations"]
+        try:
+            with open(pkl, "rb") as f:
+                u = pickle.Unpickler(f)  # noqa: S301
+                self.total_iterations = u.load()
+                infostates = {}
+                while True:
+                    item = u.load()
+                    if item is None:
+                        break
+                    key, val = item
+                    infostates[key] = val
+            self._solver._infostates = infostates
+        except (EOFError, pickle.UnpicklingError) as e:
+            print(f"[OpenSpielCFRAgent] Warning: checkpoint corrupt ({e}), starting fresh")
+            return
         self._avg_policy = None
 
     def _build_info_state(

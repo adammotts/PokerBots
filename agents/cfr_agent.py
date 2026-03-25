@@ -1,3 +1,5 @@
+import shutil
+import tempfile
 from collections import OrderedDict
 
 import numpy as np
@@ -52,8 +54,19 @@ class CFRAgent(BaseAgent):
             self._cfr.train()
 
     def save(self, path: str) -> None:
+        # Write to a temp dir on the same filesystem, then rename each file
+        # atomically so a killed process never leaves a partial checkpoint.
+        parent = os.path.dirname(os.path.abspath(path))
+        os.makedirs(path, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as tmp_dir:
+            self._cfr.model_path = tmp_dir
+            self._cfr.save()
+            for fname in os.listdir(tmp_dir):
+                os.replace(
+                    os.path.join(tmp_dir, fname),
+                    os.path.join(path, fname),
+                )
         self._cfr.model_path = path
-        self._cfr.save()
 
     def load(self, path: str) -> None:
         self._cfr.model_path = path

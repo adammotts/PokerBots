@@ -29,8 +29,11 @@ for _ in trange(
 ):
     agent.update()
     if agent.total_iterations % CHECKPOINT_EVERY == 0:
-        agent.save(MODEL_DIR)
-        tqdm.write(f"Checkpoint saved at iteration {agent.total_iterations}")
+        try:
+            agent.save(MODEL_DIR)
+            tqdm.write(f"Checkpoint saved at iteration {agent.total_iterations}")
+        except Exception as e:
+            tqdm.write(f"[WARNING] Checkpoint failed at iteration {agent.total_iterations}: {e} — continuing")
 
 agent.save(MODEL_DIR)
 print(f"Training complete. Model saved to {MODEL_DIR}")
