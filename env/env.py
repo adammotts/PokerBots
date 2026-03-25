@@ -15,11 +15,19 @@ class PokerEnv:
 
     def reset(self) -> State:
         state, player_id = self.env.reset()
-        return State(**state, player_id=player_id, hand=tuple(self.env.game.players[player_id].hand))
+        return State(
+            **state,
+            player_id=player_id,
+            hand=tuple(self.env.game.players[player_id].hand),
+        )
 
     def step(self, action: int) -> State:
         state, player_id = self.env.step(action)
-        return State(**state, player_id=player_id, hand=tuple(self.env.game.players[player_id].hand))
+        return State(
+            **state,
+            player_id=player_id,
+            hand=tuple(self.env.game.players[player_id].hand),
+        )
 
     def is_terminal(self) -> bool:
         return self.env.is_over()
