@@ -8,12 +8,12 @@ class OldManCoffeePlayer(BasePlayer):
         super().__init__(player_name="Old Man Coffee")
 
     def act(self, state: State) -> int:
-        c1, c2 = state.hand
+        sorted_hand = sorted([card.rank for card in state.hand])
 
         if (
-            c1.rank == c2.rank == "A"
-            or c1.rank == c2.rank == "K"
-            or c1.rank == c2.rank == "Q"
+            sorted_hand == ["A", "A"]
+            or sorted_hand == ["K", "K"]
+            or sorted_hand == ["Q", "Q"]
         ):
             if Action.RAISE.value in state.legal_actions:
                 return Action.RAISE.value

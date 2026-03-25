@@ -9,4 +9,4 @@ class RandomPlayer(BasePlayer):
         super().__init__(player_name="Random")
 
     def act(self, state: State) -> int:
-        return int(np.random.sample(state.legal_actions))
+        return int(np.random.choice(list(state.legal_actions.keys())))

@@ -121,16 +121,14 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 
 PYTHON = python -m main.main
 
-maniac_vs_folder:
-	PLAYER0=maniac PLAYER1=folder $(PYTHON)
+PLAYERS = calling folder maniac omc polar random
 
-maniac_vs_calling:
-	PLAYER0=maniac PLAYER1=calling $(PYTHON)
+MATCHUPS = $(foreach p0,$(PLAYERS),$(foreach p1,$(PLAYERS),$(p0)_vs_$(p1)))
 
-calling_vs_omc:
-	PLAYER0=calling PLAYER1=omc $(PYTHON)
+$(MATCHUPS):
+	@p0=$$(echo $@ | cut -d_ -f1); \
+	p1=$$(echo $@ | cut -d_ -f3); \
+	echo "Running $$p0 vs $$p1"; \
+	PLAYER0=$$p0 PLAYER1=$$p1 $(PYTHON)
 
-all:
-	make maniac_vs_folder
-	make maniac_vs_calling
-	make calling_vs_omc
+all: $(MATCHUPS)

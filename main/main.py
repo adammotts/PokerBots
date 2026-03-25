@@ -8,6 +8,7 @@ from players.calling_station_player import CallingStationPlayer
 from players.folding_player import FoldingPlayer
 from players.maniac_player import ManiacPlayer
 from players.old_man_coffee_player import OldManCoffeePlayer
+from players.polarizing_player import PolarizingPlayer
 from players.random_player import RandomPlayer
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -18,8 +19,10 @@ players: dict[str, BasePlayer] = {
     "folder": FoldingPlayer(),
     "maniac": ManiacPlayer(),
     "omc": OldManCoffeePlayer(),
+    "polar": PolarizingPlayer(),
     "random": RandomPlayer(),
 }
+
 
 def main() -> None:
     env = PokerEnv()
