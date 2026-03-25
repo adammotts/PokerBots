@@ -8,8 +8,6 @@ class FoldingPlayer(BasePlayer):
         super().__init__(player_name="Folder")
 
     def act(self, state: State) -> int:
-        if Action.FOLD.value in state.legal_actions:
-            return Action.FOLD.value
+        assert Action.FOLD.value in state.legal_actions
 
-        else:
-            return Action.CHECK.value
+        return Action.FOLD.value

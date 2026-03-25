@@ -117,3 +117,20 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 	@find models \( -name '*.pkl' -o -name '*.pt' \) -delete 2>/dev/null || true
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Model weights removed\n"
 	@printf "\n"
+
+
+PYTHON = python -m main.main
+
+maniac_vs_folder:
+	PLAYER0=maniac PLAYER1=folder $(PYTHON)
+
+maniac_vs_calling:
+	PLAYER0=maniac PLAYER1=calling $(PYTHON)
+
+calling_vs_omc:
+	PLAYER0=calling PLAYER1=omc $(PYTHON)
+
+all:
+	make maniac_vs_folder
+	make maniac_vs_calling
+	make calling_vs_omc
