@@ -1,13 +1,14 @@
 import numpy as np
 import numpy.typing as npt
 import rlcard
+from rlcard.envs.env import Env
 
 from env.processed_state import ProcessedState
 
 
 class PokerEnv:
     def __init__(self, *, allow_step_back: bool = False) -> None:
-        self.env: rlcard.envs.Env = rlcard.make(
+        self.env: Env = rlcard.make(
             "limit-holdem",
             {"allow_step_back": allow_step_back},
         )
