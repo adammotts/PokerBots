@@ -3,16 +3,16 @@ from env.state import State
 from players.base_player import BasePlayer
 
 
-class CallingStationPlayer(BasePlayer):
+class ManiacPlayer(BasePlayer):
     def __init__(self) -> None:
         pass
 
     def act(self, state: State) -> int:
-        if Action.CALL.value in state.legal_actions:
-            return Action.CALL.value
+        if Action.RAISE.value in state.legal_actions:
+            return Action.RAISE.value
 
         else:
-            return Action.CHECK.value
+            return Action.CALL.value
 
     def reset(self) -> None:
         pass

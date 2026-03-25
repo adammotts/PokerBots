@@ -1,13 +1,13 @@
-from abc import ABC, abstractmethod
-
 from env.state import State
+from players.base_player import BasePlayer
 
 
-class BasePlayer(ABC):
-    @abstractmethod
+class TightPlayer(BasePlayer):
+    def __init__(self) -> None:
+        pass
+
     def act(self, state: State) -> int:
         pass
 
-    @abstractmethod
     def reset(self) -> None:
         pass

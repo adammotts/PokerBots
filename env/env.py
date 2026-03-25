@@ -3,7 +3,7 @@ import numpy.typing as npt
 import rlcard
 from rlcard.envs.env import Env
 
-from env.processed_state import ProcessedState
+from env.state import State
 
 
 class PokerEnv:
@@ -13,21 +13,13 @@ class PokerEnv:
             {"allow_step_back": allow_step_back},
         )
 
-    def reset(self) -> ProcessedState:
+    def reset(self) -> State:
         state, player_id = self.env.reset()
-        return self._process(state, player_id)
+        return State(**state, player_id=player_id)
 
-    def step(self, action: int) -> ProcessedState:
+    def step(self, action: int) -> State:
         state, player_id = self.env.step(action)
-        return self._process(state, player_id)
-
-    def _process(self, state: dict[str, object], player_id: int) -> ProcessedState:
-        return ProcessedState(
-            obs=state["obs"],
-            legal_actions=list(state["legal_actions"].keys()),
-            raw_obs=state["raw_obs"],
-            player_id=player_id,
-        )
+        return State(**state, player_id=player_id)
 
     def is_terminal(self) -> bool:
         return self.env.is_over()
