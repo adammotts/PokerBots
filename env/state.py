@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -13,6 +14,7 @@ class State:
         legal_actions: OrderedDict[int, None],
         player_id: int,
         hand: tuple[Card, Card],
+        **kwargs: dict[str, Any],
     ) -> None:
         self.obs: npt.NDArray[np.float64] = obs
         self.legal_actions: OrderedDict[int, None] = legal_actions
