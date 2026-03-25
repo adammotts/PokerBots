@@ -23,12 +23,13 @@ if start > 0:
     print(f"Resuming from {start} existing iterations")
 remaining = TOTAL_ITERATIONS - start
 
-for _ in trange(remaining, initial=start, total=TOTAL_ITERATIONS,
-                desc="CFR Training"):
+for _ in trange(remaining, initial=start, total=TOTAL_ITERATIONS, desc="CFR Training"):
     agent.update()
     if agent._cfr.iteration % CHECKPOINT_EVERY == 0:
         try:
             agent.save(MODEL_DIR)
             tqdm.write(f"Checkpoint saved at iteration {agent._cfr.iteration}")
         except Exception as e:
-            tqdm.write(f"[WARNING] Checkpoint failed at iteration {agent._cfr.iteration}: {e} — continuing")
+            tqdm.write(
+                f"[WARNING] Checkpoint failed at iteration {agent._cfr.iteration}: {e} — continuing"
+            )

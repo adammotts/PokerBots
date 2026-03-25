@@ -2,21 +2,23 @@
 
 ## Problem Statement
 
-Game-theoretically optimal (GTO) strategies like CFR converge to Nash equilibrium — they cannot be exploited, but they also cannot exploit. Against suboptimal opponents, a GTO agent leaves money on the table by refusing to deviate from balanced play. This project investigates whether deep RL agents can learn to identify and exploit fixed opponent archetypes in Heads-Up Limit Texas Hold'em, outperforming CFR in expected value against those specific opponents.
+Game-theoretically optimal (GTO) strategies like CFR converge to Nash equilibrium — they cannot be exploited, but they also cannot exploit. Against suboptimal opponents, a GTO agent leaves money on the table by refusing to deviate from balanced play. Additionally, CFR is computationally expensive to both train (millions of game tree traversals) and run at inference (requires full game state reconstruction per action), making it impractical for real-time adaptive play.
+
+This project investigates whether deep RL agents can learn to identify and exploit opponent archetypes in Heads-Up Limit Texas Hold'em, outperforming CFR in expected value while being fast at inference (a single neural network forward pass).
 
 ## Approaches
 
 ### Baseline: CFR (Counterfactual Regret Minimization)
 
-Nash equilibrium solver via OpenSpiel. Plays optimally in expectation against any opponent but does not adapt or exploit.
+Nash equilibrium solver via OpenSpiel. Plays optimally in expectation against any opponent but does not adapt or exploit. Computationally expensive at both training and inference time.
 
-### Double DQN + LSTM
+### Double DQN + LSTM (Adam)
 
-Value-based best-response agent. The LSTM encodes betting history within a hand to handle partial observability. Trained via epsilon-greedy exploration against a fixed opponent. Hypothesis: learns a near-optimal counter-strategy for each archetype.
+Value-based best-response agent. The LSTM encodes betting history within a hand to handle partial observability. Trained via epsilon-greedy exploration against a fixed opponent archetype. Hypothesis: learns a near-optimal counter-strategy for each specific archetype.
 
-### Actor-Critic with CFR Prior
+### Adaptive Actor-Critic with Opponent Modeling (Ben)
 
-Uses CFR's action distribution as the actor (policy prior) and a critic network (FC + LSTM) that observes game state and opponent history across hands to decide when to deviate. Hypothesis: matches CFR early, then surpasses it as the critic learns to detect exploitable patterns.
+General-purpose exploitative agent that does not know which opponent it faces. Uses a dual-LSTM architecture: a game LSTM captures within-hand action sequences, and an opponent LSTM builds an implicit opponent model across hands. An adaptive KL regularization term pulls the policy toward Nash equilibrium early (when the opponent is unknown) and fades as the opponent model gains confidence, allowing the agent to exploit. Hypothesis: matches CFR early in a session, surpasses it as the opponent model identifies exploitable patterns. See [docs/ac_architecture.md](docs/ac_architecture.md) for details.
 
 ## Opponent Archetypes
 
@@ -29,17 +31,20 @@ Uses CFR's action distribution as the actor (policy prior) and a critic network 
 ## Methodology
 
 - **Format:** 1v1 Heads-Up Limit Hold'em (RLCard environment)
-- **Training:** Each RL agent is trained against a single greedy/fixed opponent archetype
-- **Evaluation:** Trained agent tested against each opponent archetype; cumulative reward compared to CFR baseline over the same number of episodes
+- **Training (DQN):** Trained per-archetype against a fixed opponent
+- **Training (AC):** Trained against a random mixture of archetypes per episode; the opponent LSTM must identify and adapt
+- **Evaluation:** Cumulative mbb/h compared to CFR baseline; early-session vs late-session performance measured to show adaptation
 
 ## Repository Structure
 
 ```
-agents/          # Agent implementations (CFR, RL agents)
+agents/          # Agent implementations (CFR, AC, RL agents)
 env/             # Game environment, state/action representations
-players/         # Fixed opponent archetypes
+evaluation/      # Evaluation harness
+players/         # Fixed opponent archetypes + agent wrappers
 scripts/         # Training and evaluation scripts
 models/          # Saved model checkpoints
 results/         # Evaluation plots and logs
 references/      # Papers and project proposal
+docs/            # Architecture documentation
 ```

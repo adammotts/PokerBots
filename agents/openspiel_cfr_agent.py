@@ -25,8 +25,19 @@ _GAME_PARAMS = {
 
 # OpenSpiel card encoding: action = rank_index * 4 + suit_index
 _RANK_TO_IDX = {
-    "2": 0, "3": 1, "4": 2, "5": 3, "6": 4, "7": 5, "8": 6,
-    "9": 7, "T": 8, "J": 9, "Q": 10, "K": 11, "A": 12,
+    "2": 0,
+    "3": 1,
+    "4": 2,
+    "5": 3,
+    "6": 4,
+    "7": 5,
+    "8": 6,
+    "9": 7,
+    "T": 8,
+    "J": 9,
+    "Q": 10,
+    "K": 11,
+    "A": 12,
 }
 _SUIT_TO_IDX = {"C": 0, "D": 1, "H": 2, "S": 3}
 
@@ -144,7 +155,9 @@ class OpenSpielCFRAgent(BaseAgent):
                     infostates[key] = val
             self._solver._infostates = infostates
         except (EOFError, pickle.UnpicklingError) as e:
-            print(f"[OpenSpielCFRAgent] Warning: checkpoint corrupt ({e}), starting fresh")
+            print(
+                f"[OpenSpielCFRAgent] Warning: checkpoint corrupt ({e}), starting fresh"
+            )
             return
         self._avg_policy = None
 
@@ -164,9 +177,7 @@ class OpenSpielCFRAgent(BaseAgent):
         state = self._game.new_initial_state()
 
         our_cards = [_rlcard_card_to_os_action(c) for c in raw_obs["hand"]]
-        public_cards = [
-            _rlcard_card_to_os_action(c) for c in raw_obs["public_cards"]
-        ]
+        public_cards = [_rlcard_card_to_os_action(c) for c in raw_obs["public_cards"]]
         used = set(our_cards + public_cards)
 
         # Pick 2 dummy cards for the opponent (any unused cards)

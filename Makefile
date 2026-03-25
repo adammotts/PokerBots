@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr evaluate pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr train-ac-pure train-ac-kl evaluate pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -64,19 +64,19 @@ sync: ## Install/sync all dependencies with uv
 
 lint: ## Check code linting with Ruff
 	@printf "$(BLUE)Checking linting...\n$(NC)"
-	@uv run ruff check agents/ env/ scripts/ players/
+	@uv run ruff check agents/ env/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting passed\n"
 	@printf "$(BLUE)Checking formatting...\n$(NC)"
-	@uv run ruff format --check agents/ env/ scripts/ players/
+	@uv run ruff format --check agents/ env/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting passed\n"
 	@printf "\n"
 
 format: ## Format code with Ruff
 	@printf "$(BLUE)Fixing linting...\n$(NC)"
-	@uv run ruff check --fix agents/ env/ scripts/ players/
+	@uv run ruff check --fix agents/ env/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting fixed\n"
 	@printf "$(BLUE)Formatting code...\n$(NC)"
-	@uv run ruff format agents/ env/ scripts/ players/
+	@uv run ruff format agents/ env/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting complete\n"
 	@printf "\n"
 
@@ -87,6 +87,14 @@ train-cfr: ## Train RLCard CFR agent
 train-openspiel-cfr: ## Train OpenSpiel MCCFR agent
 	@printf "$(BLUE)Starting OpenSpiel MCCFR training...\n$(NC)\n"
 	@uv run python scripts/train_openspiel_cfr.py
+
+train-ac-pure: ## Train AC agent (pure A2C, no KL)
+	@printf "$(BLUE)Starting AC pure training...\n$(NC)\n"
+	@uv run python -m train.train_ac --name ac_pure --lambda-kl 0.0
+
+train-ac-kl: ## Train AC agent (A2C + KL regularization)
+	@printf "$(BLUE)Starting AC KL training...\n$(NC)\n"
+	@uv run python -m train.train_ac --name ac_kl --lambda-kl 0.5
 
 evaluate: ## Evaluate agent vs opponent (10k hands, plots to results/)
 	@printf "$(BLUE)Running evaluation...\n$(NC)\n"
