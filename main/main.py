@@ -5,10 +5,11 @@ from env.env import PokerEnv
 from evaluation.evaluator import Evaluator
 from players.calling_station_player import CallingStationPlayer
 from players.maniac_player import ManiacPlayer
+from players.old_man_coffee_player import OldManCoffeePlayer
+from players.folding_player import FoldingPlayer
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-RESULTS_DIR = ROOT / "results"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RESULTS_DIR = PROJECT_ROOT / "results"
 
 
 def main() -> None:
@@ -16,9 +17,11 @@ def main() -> None:
 
     calling_station_player = CallingStationPlayer()
     maniac_player = ManiacPlayer()
+    old_man_coffee_player = OldManCoffeePlayer()
+    folding_player = FoldingPlayer()
 
     evaluator = Evaluator(
-        env=env, player0=calling_station_player, player1=maniac_player
+        env=env, player0=maniac_player, player1=folding_player
     )
 
     evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
