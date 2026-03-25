@@ -27,15 +27,30 @@ players: dict[str, BasePlayer] = {
 def main() -> None:
     env = PokerEnv()
 
-    p0_name = os.getenv("PLAYER0")
-    p1_name = os.getenv("PLAYER1")
+    run_all = os.getenv("ALL")
 
-    player0 = players[p0_name]
-    player1 = players[p1_name]
+    if not run_all:
+        p0_name = os.getenv("PLAYER0")
+        p1_name = os.getenv("PLAYER1")
 
-    evaluator = Evaluator(env=env, player0=player0, player1=player1)
+        player0 = players[p0_name]
+        player1 = players[p1_name]
 
-    evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
+        evaluator = Evaluator(env=env, player0=player0, player1=player1)
+
+        evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
+
+    else:
+        player_list = list(players.keys())
+        n = len(player_list)
+        for i in range(n):
+            for j in range(i + 1, n):
+                player0 = players[player_list[i]]
+                player1 = players[player_list[j]]
+
+                evaluator = Evaluator(env=env, player0=player0, player1=player1)
+
+                evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
 
 
 if __name__ == "__main__":

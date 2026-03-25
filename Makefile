@@ -131,4 +131,5 @@ $(MATCHUPS):
 	echo "Running $$p0 vs $$p1"; \
 	PLAYER0=$$p0 PLAYER1=$$p1 $(PYTHON)
 
-all: $(MATCHUPS)
+all:
+	ALL=1 $(PYTHON)
