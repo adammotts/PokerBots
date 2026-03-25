@@ -1,4 +1,4 @@
-import shutil
+import os
 import tempfile
 from collections import OrderedDict
 
