@@ -5,7 +5,7 @@ from players.base_player import BasePlayer
 
 class OldManCoffeePlayer(BasePlayer):
     def __init__(self, *, player_id: int) -> None:
-        super().__init__(player_id=player_id)
+        super().__init__(player_id=player_id, player_name="Old Man Coffee")
 
     def act(self, state: State) -> int:
         c1, c2 = state.hand

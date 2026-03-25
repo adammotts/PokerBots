@@ -4,9 +4,9 @@ from env.state import State
 
 
 class BasePlayer(ABC):
-    def __init__(self, *, player_id: int) -> None:
+    def __init__(self, *, player_id: int, player_name: str) -> None:
         self.player_id: int = player_id
-        self.episode_payoffs: list[int] = []
+        self.player_name: str = player_name
 
     @abstractmethod
     def act(self, state: State) -> int:
