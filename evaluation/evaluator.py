@@ -33,7 +33,7 @@ class Evaluator:
         for episode_num in trange(num_episodes, desc="Evaluating"):
             payoffs = self.run_episode()
 
-            rewards[episode_num] = payoffs[episode_num % 2]
+            rewards[episode_num] = payoffs[0]
 
         return rewards
 

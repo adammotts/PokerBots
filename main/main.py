@@ -21,7 +21,7 @@ def main() -> None:
     folding_player = FoldingPlayer()
 
     evaluator = Evaluator(
-        env=env, player0=maniac_player, player1=folding_player
+        env=env, player0=maniac_player, player1=calling_station_player
     )
 
     evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
