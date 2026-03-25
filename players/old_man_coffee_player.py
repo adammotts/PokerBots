@@ -4,8 +4,8 @@ from players.base_player import BasePlayer
 
 
 class OldManCoffeePlayer(BasePlayer):
-    def __init__(self) -> None:
-        pass
+    def __init__(self, *, player_id: int) -> None:
+        super().__init__(player_id=player_id)
 
     def act(self, state: State) -> int:
         c1, c2 = state.hand
@@ -26,6 +26,3 @@ class OldManCoffeePlayer(BasePlayer):
 
         else:
             return Action.FOLD.value
-
-    def reset(self) -> None:
-        pass
