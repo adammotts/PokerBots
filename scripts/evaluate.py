@@ -12,7 +12,6 @@ from tqdm import trange  # noqa: E402
 from agents.base_agent import BaseAgent  # noqa: E402
 from agents.cfr_agent import CFRAgent  # noqa: E402
 from agents.openspiel_cfr_agent import OpenSpielCFRAgent  # noqa: E402
-from agents.random_agent import RandomAgent  # noqa: E402
 from env.env import PokerEnv  # noqa: E402
 
 # ── Config ──────────────────────────────────────────────────────────
@@ -35,8 +34,6 @@ def load_agent(name: str) -> BaseAgent:
         agent = CFRAgent(model_path=str(ROOT / "models" / "cfr"))
         agent.load(str(ROOT / "models" / "cfr"))
         return agent
-    if name == "random":
-        return RandomAgent()
     msg = f"Unknown agent: {name}"
     raise ValueError(msg)
 

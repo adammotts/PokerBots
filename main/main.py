@@ -8,23 +8,18 @@ from players.calling_station_player import CallingStationPlayer
 from players.folding_player import FoldingPlayer
 from players.maniac_player import ManiacPlayer
 from players.old_man_coffee_player import OldManCoffeePlayer
+from players.random_player import RandomPlayer
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
 
-
-def get_player(name: str) -> BasePlayer:
-    if name == "maniac":
-        return ManiacPlayer()
-    elif name == "calling":
-        return CallingStationPlayer()
-    elif name == "omc":
-        return OldManCoffeePlayer()
-    elif name == "folder":
-        return FoldingPlayer()
-    else:
-        raise ValueError(f"Unknown player: {name}")
-
+players: dict[str, BasePlayer] = {
+    "calling": CallingStationPlayer(),
+    "folder": FoldingPlayer(),
+    "maniac": ManiacPlayer(),
+    "omc": OldManCoffeePlayer(),
+    "random": RandomPlayer(),
+}
 
 def main() -> None:
     env = PokerEnv()
@@ -32,8 +27,8 @@ def main() -> None:
     p0_name = os.getenv("PLAYER0")
     p1_name = os.getenv("PLAYER1")
 
-    player0 = get_player(p0_name)
-    player1 = get_player(p1_name)
+    player0 = players[p0_name]
+    player1 = players[p1_name]
 
     evaluator = Evaluator(env=env, player0=player0, player1=player1)
 
