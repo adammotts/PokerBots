@@ -5,7 +5,7 @@ from players.base_player import BasePlayer
 
 class CFRPlayer(BasePlayer):
     def __init__(self, *, agent: CFRAgent) -> None:
-        super().__init__(player_name="CFR")
+        super().__init__(player_name="CFR", is_agent=True)
         self.agent: CFRAgent = agent
 
     def act(self, state: State) -> int:

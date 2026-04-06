@@ -1,63 +1,112 @@
-import os
-from pathlib import Path
+from __future__ import annotations
 
-from agents.ac_agent import ActorCriticAgent
+import argparse
+
 from env.env import PokerEnv
-from evaluation.evaluator import Evaluator
-from players.ac_player import ActorCriticPlayer
-from players.base_player import BasePlayer
-from players.calling_station_player import CallingStationPlayer
-from players.folding_player import FoldingPlayer
-from players.maniac_player import ManiacPlayer
-from players.old_man_coffee_player import OldManCoffeePlayer
-from players.polarizing_player import PolarizingPlayer
-from players.random_player import RandomPlayer
+from evaluation.evaluator import (
+    DEFAULT_AGENTS,
+    PLAYER_FACTORIES,
+    RESULTS_DIR,
+    Evaluator,
+)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = PROJECT_ROOT / "results"
 
-ac_agent_pure = ActorCriticAgent()
-ac_agent_pure.load(str(PROJECT_ROOT / "models" / "ac_pure" / "final.pt"))
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run poker evaluations")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-agents: dict[str, BasePlayer] = {
-    "ac-pure": ActorCriticPlayer(agent=ac_agent_pure),
-    "random": RandomPlayer(),
-}
+    matchup = subparsers.add_parser("matchup", help="Run matchup evaluation")
+    matchup.add_argument("--agent")
+    matchup.add_argument("--opponent")
+    matchup.add_argument("--episodes", type=int, default=10_000)
+    matchup.add_argument("--all", action="store_true")
 
-opponents: dict[str, BasePlayer] = {
-    "calling": CallingStationPlayer(),
-    "folder": FoldingPlayer(),
-    "maniac": ManiacPlayer(),
-    "omc": OldManCoffeePlayer(),
-    "polar": PolarizingPlayer(),
-    "random": RandomPlayer(),
-}
+    sessions = subparsers.add_parser(
+        "sessions",
+        help="Run multi-session adaptation evaluation",
+    )
+    sessions.add_argument("--agents", nargs="+", required=True)
+    sessions.add_argument("--opponent", choices=sorted(PLAYER_FACTORIES), required=True)
+    sessions.add_argument("--sessions", type=int, default=50)
+    sessions.add_argument("--hands", type=int, default=1000)
+
+    return parser.parse_args()
 
 
 def main() -> None:
-    env = PokerEnv()
+    args = parse_args()
 
-    run_all = os.getenv("ALL")
+    if args.command == "matchup":
+        if args.all:
+            for agent_name in DEFAULT_AGENTS:
+                for opponent_name in PLAYER_FACTORIES:
+                    print(f"\n{'=' * 50}")
+                    print(f"  {agent_name} vs {opponent_name}")
+                    print(f"{'=' * 50}")
+                    Evaluator(
+                        env=PokerEnv(),
+                        player0=PLAYER_FACTORIES[agent_name](),
+                        player1=PLAYER_FACTORIES[opponent_name](),
+                    ).evaluate(
+                        num_episodes=args.episodes,
+                        output_directory=RESULTS_DIR,
+                    )
+            return
 
-    if not run_all:
-        agent_name = os.getenv("AGENT")
-        opp_name = os.getenv("OPPONENT")
+        if not args.agent or not args.opponent:
+            raise ValueError(
+                "`matchup` requires --agent and --opponent unless --all is set."
+            )
 
-        agent = agents[agent_name]
-        opponent = opponents[opp_name]
+        agent_name = args.agent.strip().lower().replace("_", "-")
+        opponent_name = args.opponent.strip().lower().replace("_", "-")
+        if agent_name not in PLAYER_FACTORIES:
+            raise ValueError(f"Unknown player '{agent_name}'")
 
-        evaluator = Evaluator(env=env, player0=agent, player1=opponent)
-        evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
+        print(f"\n{'=' * 50}")
+        print(f"  {agent_name} vs {opponent_name}")
+        print(f"{'=' * 50}")
+        Evaluator(
+            env=PokerEnv(),
+            player0=PLAYER_FACTORIES[agent_name](),
+            player1=PLAYER_FACTORIES[opponent_name](),
+        ).evaluate(
+            num_episodes=args.episodes,
+            output_directory=RESULTS_DIR,
+        )
+        return
 
-    else:
-        for agent_name, agent in agents.items():
-            for opp_name, opponent in opponents.items():
-                print(f"\n{'=' * 50}")
-                print(f"  {agent_name} vs {opp_name}")
-                print(f"{'=' * 50}")
+    results = {}
+    opponent_name = args.opponent.strip().lower().replace("_", "-")
+    plotter: Evaluator | None = None
 
-                evaluator = Evaluator(env=env, player0=agent, player1=opponent)
-                evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
+    for agent_name in args.agents:
+        label = agent_name.strip().lower().replace("_", "-")
+        if label not in PLAYER_FACTORIES:
+            raise ValueError(f"Unknown player '{label}'")
+
+        print(f"\nEvaluating {label} vs {opponent_name}...")
+        plotter = Evaluator(
+            env=PokerEnv(),
+            player0=PLAYER_FACTORIES[label](),
+            player1=PLAYER_FACTORIES[opponent_name](),
+        )
+        results[label] = plotter.evaluate_sessions(
+            label=label,
+            opponent_name=opponent_name,
+            num_sessions=args.sessions,
+            num_hands=args.hands,
+            output_directory=RESULTS_DIR,
+        )
+
+    if plotter is None:
+        raise ValueError("No agents provided for session evaluation.")
+
+    plotter.plot_session_results(
+        results=results,
+        opponent_name=opponent_name,
+        output_path=RESULTS_DIR / f"sessions_vs_{opponent_name}.png",
+    )
 
 
 if __name__ == "__main__":

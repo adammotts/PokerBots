@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-cfr train-ac-pure train-ac-kl evaluate-sessions pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-ac-pure train-ac-kl pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -92,10 +92,6 @@ train-ac-kl: ## Train AC agent (A2C + KL regularization)
 	@printf "$(BLUE)Starting AC KL training...\n$(NC)\n"
 	@uv run python -m train.train_ac --name ac_kl --lambda-kl 0.5
 
-evaluate-sessions: ## Evaluate agent adaptation over hands (multi-session with CI bands)
-	@printf "$(BLUE)Running session evaluation...\n$(NC)\n"
-	@uv run python -m evaluation.evaluate_sessions $(ARGS)
-
 pack-models: ## Compress models/ into models.tar.gz for git
 	@printf "$(BLUE)Packing models...\n$(NC)"
 	@if [ -d models ] && [ "$$(find models \( -name '*.pkl' -o -name '*.pt' \) 2>/dev/null | head -1)" ]; then \
@@ -124,7 +120,7 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 
 
 PYTHON = python -m main.main
-SESSIONS = python -m evaluation.evaluate_sessions
+SESSIONS = python -m main.main sessions
 
 AGENTS = ac-pure random
 OPPONENTS = calling folder maniac omc polar random
@@ -136,10 +132,10 @@ $(MATCHUPS):
 	@a=$$(echo $@ | cut -d_ -f1); \
 	o=$$(echo $@ | cut -d_ -f3); \
 	echo "Running $$a vs $$o"; \
-	AGENT=$$a OPPONENT=$$o uv run $(PYTHON)
+	uv run $(PYTHON) matchup --agent $$a --opponent $$o
 
 all: ## Run all agents against all opponents
-	@ALL=1 uv run $(PYTHON)
+	@uv run $(PYTHON) matchup --all
 
 $(SESSION_MATCHUPS):
 	@target=$$(echo $@ | sed 's/^sessions-//'); \
