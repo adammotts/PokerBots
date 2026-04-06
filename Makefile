@@ -82,7 +82,7 @@ format: ## Format code with Ruff
 
 train-cfr: ## Train OpenSpiel MCCFR agent
 	@printf "$(BLUE)Starting MCCFR training...\n$(NC)\n"
-	@uv run python scripts/train_cfr.py
+	@uv run python -m train.train_cfr
 
 train-ac-pure: ## Train AC agent (pure A2C, no KL)
 	@printf "$(BLUE)Starting AC pure training...\n$(NC)\n"
