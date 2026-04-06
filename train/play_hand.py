@@ -14,7 +14,6 @@ def play_hand(
     env: PokerEnv,
     agent: BaseAgent,
     opponent: BasePlayer,
-    agent_seat: int,
 ) -> float:
     """Play one hand. Returns the agent's payoff.
 
@@ -22,7 +21,6 @@ def play_hand(
         env: The poker environment.
         agent: Any BaseAgent (trains via act/observe/update).
         opponent: Any BasePlayer (fixed policy).
-        agent_seat: Which seat (0 or 1) the agent occupies this hand.
     """
     state = env.reset()
     action_record: list[tuple[int, str]] = []
@@ -30,12 +28,10 @@ def play_hand(
     while not env.is_terminal():
         pid = state.player_id
 
-        if pid == agent_seat:
+        if pid == 0:
             action = agent.act(
-                state.obs,
-                list(state.legal_actions.keys()),
+                state=state,
                 training=True,
-                player_id=pid,
                 action_record=action_record,
             )
         else:
@@ -45,7 +41,7 @@ def play_hand(
         state = env.step(action)
 
     payoffs = env.get_payoffs()
-    agent_payoff = float(payoffs[agent_seat])
+    agent_payoff = float(payoffs[0])
 
     agent.observe(
         Transition(

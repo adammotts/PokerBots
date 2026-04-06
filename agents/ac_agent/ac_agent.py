@@ -107,23 +107,18 @@ class ActorCriticAgent(BaseAgent):
 
     def act(
         self,
-        obs: npt.NDArray[np.float64],
-        legal_actions: list[int],
         *,
+        state: State,
         training: bool = True,
-        raw_obs: dict[str, object] | None = None,
         action_record: list[tuple[int, str]] | None = None,
-        player_id: int = 0,
     ) -> int:
         if self._game_hidden_actor is None:
             self._reset_hand()
-            self._our_player_id = player_id
+            self._our_player_id = state.player_id
 
         if action_record is not None:
             self._action_record = action_record
 
-        # Build features from a State-like object
-        state = _make_state_proxy(obs, legal_actions, player_id)
         features = build_features(state, self.device).unsqueeze(0)  # (1, 77)
         opp_context = self._get_opp_context()  # (1, 32)
 
@@ -137,7 +132,7 @@ class ActorCriticAgent(BaseAgent):
 
         # Mask illegal actions
         mask = torch.full((4,), float("-inf"), device=self.device)
-        for a in legal_actions:
+        for a in state.legal_actions:
             mask[a] = 0.0
         masked_logits = logits.squeeze(0) + mask
 

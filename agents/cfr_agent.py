@@ -1,13 +1,11 @@
 import os
 import tempfile
-from collections import OrderedDict
 
-import numpy as np
-import numpy.typing as npt
 import rlcard
 from rlcard.agents.cfr_agent import CFRAgent as RLCardCFRAgent
 
 from agents.base_agent import BaseAgent, Transition
+from env.state import State
 
 
 class CFRAgent(BaseAgent):
@@ -31,20 +29,19 @@ class CFRAgent(BaseAgent):
 
     def act(
         self,
-        obs: npt.NDArray[np.float64],
-        legal_actions: list[int],
         *,
+        state: State,
         training: bool = True,
-        raw_obs: dict[str, object] | None = None,
         action_record: list[tuple[int, str]] | None = None,
-        player_id: int = 0,
     ) -> int:
-        state: dict[str, object] = {
-            "obs": obs,
-            "legal_actions": OrderedDict.fromkeys(legal_actions),
-        }
-        action, _ = self._cfr.eval_step(state)
-        return int(action)
+        action, _ = self._cfr.eval_step(
+            {
+                "obs": state.obs,
+                "legal_actions": state.legal_actions,
+                "raw_legal_actions": state.raw_legal_actions,
+            }
+        )
+        return action
 
     def observe(self, transition: Transition) -> None:
         pass

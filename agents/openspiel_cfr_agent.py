@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import numpy.typing as npt
 import pyspiel
+from env.state import State
 from open_spiel.python.algorithms import external_sampling_mccfr as es_mccfr
 
 from agents.base_agent import BaseAgent, Transition
@@ -72,28 +73,25 @@ class OpenSpielCFRAgent(BaseAgent):
 
     def act(
         self,
-        obs: npt.NDArray[np.float64],
-        legal_actions: list[int],
         *,
+        state: State,
         training: bool = True,
-        raw_obs: dict[str, object] | None = None,
         action_record: list[tuple[int, str]] | None = None,
-        player_id: int = 0,
     ) -> int:
-        if raw_obs is None:
-            return int(np.random.choice(legal_actions))
+        if state.raw_obs is None:
+            return int(np.random.choice(state.legal_actions))
 
         if self._avg_policy is None:
             self._avg_policy = self._solver.average_policy()
 
-        os_state = self._build_info_state(raw_obs, action_record or [], player_id)
+        os_state = self._build_info_state(state.raw_obs, action_record or [], state.player_id)
         try:
             probs = self._avg_policy.action_probabilities(os_state)
         except (IndexError, KeyError, pyspiel.SpielError):
-            return int(np.random.choice(legal_actions))
+            return int(np.random.choice(state.legal_actions))
 
         # Map OpenSpiel action probs → RLCard 4-action space
-        legal_set = set(legal_actions)
+        legal_set = set(state.legal_actions.keys())
         prob_array = np.zeros(4)
         for os_action, prob in probs.items():
             for rl_action in _OS_TO_RLCARD[os_action]:
@@ -102,14 +100,14 @@ class OpenSpielCFRAgent(BaseAgent):
 
         # Zero out illegal actions and renormalize
         mask = np.zeros(4)
-        for a in legal_actions:
+        for a in state.legal_actions:
             mask[a] = 1.0
         prob_array *= mask
         total = prob_array.sum()
         if total > 0:
             prob_array /= total
         else:
-            prob_array[legal_actions] = 1.0 / len(legal_actions)
+            prob_array[list(state.legal_actions)] = 1.0 / len(state.legal_actions)
 
         return int(np.random.choice(4, p=prob_array))
 

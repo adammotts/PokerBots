@@ -9,4 +9,4 @@ class CFRPlayer(BasePlayer):
         self.cfr_agent: CFRAgent = cfr_agent
 
     def act(self, state: State) -> int:
-        return self.cfr_agent.act(state)
+        return self.cfr_agent.act(state=state, training=False)

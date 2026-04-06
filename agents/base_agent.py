@@ -4,6 +4,8 @@ from typing import TypedDict
 import numpy as np
 import numpy.typing as npt
 
+from env.state import State
+
 
 class Transition(TypedDict):
     obs: npt.NDArray[np.float64]
@@ -17,13 +19,10 @@ class BaseAgent(ABC):
     @abstractmethod
     def act(
         self,
-        obs: npt.NDArray[np.float64],
-        legal_actions: list[int],
         *,
+        state: State,
         training: bool = True,
-        raw_obs: dict[str, object] | None = None,
         action_record: list[tuple[int, str]] | None = None,
-        player_id: int = 0,
     ) -> int: ...
 
     @abstractmethod

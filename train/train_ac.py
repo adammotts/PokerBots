@@ -80,14 +80,12 @@ def train(
 
         episode_rewards: list[float] = []
 
-        for hand in trange(
+        for _ in trange(
             hands_per_episode,
             desc=f"Ep {episode + 1}/{num_episodes} vs {opp_name}",
             leave=False,
         ):
-            # Alternate seats each hand for fairness
-            agent_seat = hand % 2
-            payoff = play_hand(env, agent, opponent, agent_seat)
+            payoff = play_hand(env, agent, opponent)
             agent.update()
             episode_rewards.append(payoff)
 

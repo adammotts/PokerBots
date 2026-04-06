@@ -12,8 +12,6 @@ class ActorCriticPlayer(BasePlayer):
 
     def act(self, state: State) -> int:
         return self.agent.act(
-            state.obs,
-            list(state.legal_actions.keys()),
+            state=state,
             training=False,
-            player_id=state.player_id,
         )

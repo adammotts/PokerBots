@@ -67,16 +67,10 @@ def main() -> None:
     payoffs = np.zeros(NUM_EPISODES)
 
     for i in trange(NUM_EPISODES, desc="Evaluating"):
-        # Alternate positions each hand for fairness
-        if i % 2 == 0:
-            agents = [agent, opponent]
-            seat = 0
-        else:
-            agents = [opponent, agent]
-            seat = 1
+        agents = [agent, opponent]
 
         episode_payoffs = run_episode(env, agents)
-        payoffs[i] = episode_payoffs[seat]
+        payoffs[i] = episode_payoffs[0]
 
     # ── Stats ───────────────────────────────────────────────────────
     mbb_per_hand = payoffs / BIG_BLIND * 1000

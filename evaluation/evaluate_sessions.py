@@ -50,20 +50,19 @@ def run_session(
 ) -> np.ndarray:
     agent_player.agent.reset_opponent_state()
     payoffs = np.zeros(num_hands)
+    players: dict[int, BasePlayer] = {
+        0: agent_player,
+        1: opponent,
+    }
 
     for hand in range(num_hands):
         state = env.reset()
-        agent_seat = hand % 2
-        players: dict[int, BasePlayer] = {
-            agent_seat: agent_player,
-            1 - agent_seat: opponent,
-        }
 
         while not env.is_terminal():
             action = players[state.player_id].act(state)
             state = env.step(action)
 
-        payoffs[hand] = env.get_payoffs()[agent_seat]
+        payoffs[hand] = env.get_payoffs()[0]
 
     return payoffs
 
