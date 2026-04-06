@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr train-ac-pure train-ac-kl evaluate-sessions pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-cfr train-ac-pure train-ac-kl evaluate-sessions pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -80,13 +80,9 @@ format: ## Format code with Ruff
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting complete\n"
 	@printf "\n"
 
-train-cfr: ## Train RLCard CFR agent
-	@printf "$(BLUE)Starting RLCard CFR training...\n$(NC)\n"
+train-cfr: ## Train OpenSpiel MCCFR agent
+	@printf "$(BLUE)Starting MCCFR training...\n$(NC)\n"
 	@uv run python scripts/train_cfr.py
-
-train-openspiel-cfr: ## Train OpenSpiel MCCFR agent
-	@printf "$(BLUE)Starting OpenSpiel MCCFR training...\n$(NC)\n"
-	@uv run python scripts/train_openspiel_cfr.py
 
 train-ac-pure: ## Train AC agent (pure A2C, no KL)
 	@printf "$(BLUE)Starting AC pure training...\n$(NC)\n"

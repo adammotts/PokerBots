@@ -9,27 +9,33 @@ from tqdm import tqdm, trange  # noqa: E402
 from agents.cfr_agent import CFRAgent  # noqa: E402
 
 MODEL_DIR = str(ROOT / "models" / "cfr")
-TOTAL_ITERATIONS = 100_000
-CHECKPOINT_EVERY = 5
+TOTAL_ITERATIONS = 1_000_000
+CHECKPOINT_EVERY = 10_000
 
 print(
-    f"Training CFR for {TOTAL_ITERATIONS} iterations, saving every {CHECKPOINT_EVERY}"
+    f"Training OpenSpiel MCCFR for {TOTAL_ITERATIONS} iterations, "
+    f"saving every {CHECKPOINT_EVERY}"
 )
 
-agent = CFRAgent(model_path=MODEL_DIR, iterations=1)
+agent = CFRAgent(iterations=1)
 agent.load(MODEL_DIR)
-start = agent._cfr.iteration
+start = agent.total_iterations
 if start > 0:
     print(f"Resuming from {start} existing iterations")
 remaining = TOTAL_ITERATIONS - start
 
-for _ in trange(remaining, initial=start, total=TOTAL_ITERATIONS, desc="CFR Training"):
+for _ in trange(
+    remaining, initial=start, total=TOTAL_ITERATIONS, desc="MCCFR Training"
+):
     agent.update()
-    if agent._cfr.iteration % CHECKPOINT_EVERY == 0:
+    if agent.total_iterations % CHECKPOINT_EVERY == 0:
         try:
             agent.save(MODEL_DIR)
-            tqdm.write(f"Checkpoint saved at iteration {agent._cfr.iteration}")
+            tqdm.write(f"Checkpoint saved at iteration {agent.total_iterations}")
         except Exception as e:
             tqdm.write(
-                f"[WARNING] Checkpoint failed at iteration {agent._cfr.iteration}: {e} — continuing"
+                f"[WARNING] Checkpoint failed at iteration {agent.total_iterations}: {e} — continuing"
             )
+
+agent.save(MODEL_DIR)
+print(f"Training complete. Model saved to {MODEL_DIR}")
