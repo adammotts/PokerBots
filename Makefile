@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr train-ac-pure train-ac-kl evaluate pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-openspiel-cfr train-ac-pure train-ac-kl evaluate-sessions pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -64,19 +64,19 @@ sync: ## Install/sync all dependencies with uv
 
 lint: ## Check code linting with Ruff
 	@printf "$(BLUE)Checking linting...\n$(NC)"
-	@uv run ruff check agents/ env/ scripts/ players/ train/
+	@uv run ruff check agents/ env/ evaluation/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting passed\n"
 	@printf "$(BLUE)Checking formatting...\n$(NC)"
-	@uv run ruff format --check agents/ env/ scripts/ players/ train/
+	@uv run ruff format --check agents/ env/ evaluation/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting passed\n"
 	@printf "\n"
 
 format: ## Format code with Ruff
 	@printf "$(BLUE)Fixing linting...\n$(NC)"
-	@uv run ruff check --fix agents/ env/ scripts/ players/ train/
+	@uv run ruff check --fix agents/ env/ evaluation/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting fixed\n"
 	@printf "$(BLUE)Formatting code...\n$(NC)"
-	@uv run ruff format agents/ env/ scripts/ players/ train/
+	@uv run ruff format agents/ env/ evaluation/ scripts/ players/ train/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting complete\n"
 	@printf "\n"
 
@@ -96,9 +96,9 @@ train-ac-kl: ## Train AC agent (A2C + KL regularization)
 	@printf "$(BLUE)Starting AC KL training...\n$(NC)\n"
 	@uv run python -m train.train_ac --name ac_kl --lambda-kl 0.5
 
-evaluate: ## Evaluate agent vs opponent (10k hands, plots to results/)
-	@printf "$(BLUE)Running evaluation...\n$(NC)\n"
-	@uv run python scripts/evaluate.py
+evaluate-sessions: ## Evaluate agent adaptation over hands (multi-session with CI bands)
+	@printf "$(BLUE)Running session evaluation...\n$(NC)\n"
+	@uv run python -m evaluation.evaluate_sessions $(ARGS)
 
 pack-models: ## Compress models/ into models.tar.gz for git
 	@printf "$(BLUE)Packing models...\n$(NC)"
@@ -128,16 +128,32 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 
 
 PYTHON = python -m main.main
+SESSIONS = python -m evaluation.evaluate_sessions
 
-PLAYERS = calling folder maniac omc polar random
+AGENTS = ac-pure random
+OPPONENTS = calling folder maniac omc polar random
 
-MATCHUPS = $(foreach p0,$(PLAYERS),$(foreach p1,$(PLAYERS),$(p0)_vs_$(p1)))
+MATCHUPS = $(foreach a,$(AGENTS),$(foreach o,$(OPPONENTS),$(a)_vs_$(o)))
+SESSION_MATCHUPS = $(foreach a,$(AGENTS),$(foreach o,$(OPPONENTS),sessions-$(a)_vs_$(o)))
 
 $(MATCHUPS):
-	@p0=$$(echo $@ | cut -d_ -f1); \
-	p1=$$(echo $@ | cut -d_ -f3); \
-	echo "Running $$p0 vs $$p1"; \
-	PLAYER0=$$p0 PLAYER1=$$p1 $(PYTHON)
+	@a=$$(echo $@ | cut -d_ -f1); \
+	o=$$(echo $@ | cut -d_ -f3); \
+	echo "Running $$a vs $$o"; \
+	AGENT=$$a OPPONENT=$$o uv run $(PYTHON)
 
-all:
-	ALL=1 $(PYTHON)
+all: ## Run all agents against all opponents
+	@ALL=1 uv run $(PYTHON)
+
+$(SESSION_MATCHUPS):
+	@target=$$(echo $@ | sed 's/^sessions-//'); \
+	a=$$(echo $$target | cut -d_ -f1); \
+	o=$$(echo $$target | cut -d_ -f3); \
+	echo "Running sessions: $$a vs $$o"; \
+	uv run $(SESSIONS) --agents $$a --opponent $$o
+
+sessions-all: ## Run session evaluation for all agents against all opponents
+	@for o in $(OPPONENTS); do \
+		echo "Running sessions vs $$o"; \
+		uv run $(SESSIONS) --agents $(AGENTS) --opponent $$o; \
+	done

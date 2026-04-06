@@ -53,31 +53,25 @@ class Evaluator:
         print(f"  mbb/h:       {avg_mbb:.1f} ± {std_mbb:.1f}")
         print(f"{'=' * 50}")
 
-        # ── Plot ────────────────────────────────────────────────────────
+        output_directory.mkdir(parents=True, exist_ok=True)
+        name = f"{self.players[0].player_name}_vs_{self.players[1].player_name}"
+
+        npz_path = output_directory / f"{name}.npz"
+        np.savez(npz_path, payoffs=payoffs)
+        print(f"  Data saved to {npz_path}")
+
         sns.set_theme(style="darkgrid")
-        fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        fig, ax = plt.subplots(figsize=(10, 5))
 
-        # Rolling average mbb/h
         rolling = np.convolve(mbb_per_hand, np.ones(WINDOW) / WINDOW, mode="valid")
-        axes[0].plot(range(WINDOW - 1, num_episodes), rolling, linewidth=1)
-        axes[0].axhline(y=0, color="gray", linestyle="--", alpha=0.5)
-        axes[0].set_ylabel("mbb/h (rolling avg)")
-        axes[0].set_title(
-            f"{self.players[0].player_name} vs {self.players[1].player_name}  —  {avg_mbb:.1f} ± {std_mbb:.1f} mbb/h"
-        )
-
-        # Cumulative average mbb/h
-        cumulative = np.cumsum(mbb_per_hand) / np.arange(1, num_episodes + 1)
-        axes[1].plot(cumulative, linewidth=1)
-        axes[1].axhline(y=0, color="gray", linestyle="--", alpha=0.5)
-        axes[1].set_xlabel("Hands played")
-        axes[1].set_ylabel("Cumulative mbb/h")
+        ax.plot(range(WINDOW - 1, num_episodes), rolling, linewidth=1)
+        ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+        ax.set_xlabel("Hands played")
+        ax.set_ylabel("mbb/h (rolling avg)")
+        ax.set_title(f"{name}  —  {avg_mbb:.1f} ± {std_mbb:.1f} mbb/h")
 
         plt.tight_layout()
-        output_directory.mkdir(parents=True, exist_ok=True)
-        out = (
-            output_directory
-            / f"{self.players[0].player_name}_vs_{self.players[1].player_name}.png"
-        )
-        fig.savefig(out, dpi=150)
-        print(f"  Plot saved to {out}")
+        png_path = output_directory / f"{name}.png"
+        fig.savefig(png_path, dpi=150)
+        plt.close(fig)
+        print(f"  Plot saved to {png_path}")

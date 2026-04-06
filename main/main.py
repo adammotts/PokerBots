@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 
+from agents.ac_agent import ActorCriticAgent
 from env.env import PokerEnv
 from evaluation.evaluator import Evaluator
+from players.ac_player import ActorCriticPlayer
 from players.base_player import BasePlayer
 from players.calling_station_player import CallingStationPlayer
 from players.folding_player import FoldingPlayer
@@ -14,7 +16,15 @@ from players.random_player import RandomPlayer
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
 
-players: dict[str, BasePlayer] = {
+ac_agent_pure = ActorCriticAgent()
+ac_agent_pure.load(str(PROJECT_ROOT / "models" / "ac_pure" / "final.pt"))
+
+agents: dict[str, BasePlayer] = {
+    "ac-pure": ActorCriticPlayer(agent=ac_agent_pure),
+    "random": RandomPlayer(),
+}
+
+opponents: dict[str, BasePlayer] = {
     "calling": CallingStationPlayer(),
     "folder": FoldingPlayer(),
     "maniac": ManiacPlayer(),
@@ -30,26 +40,23 @@ def main() -> None:
     run_all = os.getenv("ALL")
 
     if not run_all:
-        p0_name = os.getenv("PLAYER0")
-        p1_name = os.getenv("PLAYER1")
+        agent_name = os.getenv("AGENT")
+        opp_name = os.getenv("OPPONENT")
 
-        player0 = players[p0_name]
-        player1 = players[p1_name]
+        agent = agents[agent_name]
+        opponent = opponents[opp_name]
 
-        evaluator = Evaluator(env=env, player0=player0, player1=player1)
-
+        evaluator = Evaluator(env=env, player0=agent, player1=opponent)
         evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
 
     else:
-        player_list = list(players.keys())
-        n = len(player_list)
-        for i in range(n):
-            for j in range(i + 1, n):
-                player0 = players[player_list[i]]
-                player1 = players[player_list[j]]
+        for agent_name, agent in agents.items():
+            for opp_name, opponent in opponents.items():
+                print(f"\n{'=' * 50}")
+                print(f"  {agent_name} vs {opp_name}")
+                print(f"{'=' * 50}")
 
-                evaluator = Evaluator(env=env, player0=player0, player1=player1)
-
+                evaluator = Evaluator(env=env, player0=agent, player1=opponent)
                 evaluator.evaluate(num_episodes=10_000, output_directory=RESULTS_DIR)
 
 

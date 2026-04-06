@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 
 import numpy as np
+import torch
 from tqdm import trange
 
 from agents.ac_agent import ActorCriticAgent
@@ -16,7 +17,6 @@ from players.calling_station_player import CallingStationPlayer
 from players.maniac_player import ManiacPlayer
 from players.old_man_coffee_player import OldManCoffeePlayer
 from players.polarizing_player import PolarizingPlayer
-from players.random_player import RandomPlayer
 from train.play_hand import play_hand
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -26,7 +26,6 @@ OPPONENTS: dict[str, type[BasePlayer]] = {
     "calling_station": CallingStationPlayer,
     "maniac": ManiacPlayer,
     "old_man_coffee": OldManCoffeePlayer,
-    "random": RandomPlayer,
     "polarizing": PolarizingPlayer,
 }
 
@@ -64,6 +63,15 @@ def train(
     opponent_names = list(OPPONENTS.keys())
 
     all_episode_rewards: list[float] = []
+    all_opponent_names: list[str] = []
+    log_path = save_dir / "training_log.npz"
+
+    def save_log() -> None:
+        np.savez(
+            log_path,
+            episode_rewards=np.array(all_episode_rewards),
+            opponent_names=np.array(all_opponent_names),
+        )
 
     for episode in range(num_episodes):
         opp_name = random.choice(opponent_names)
@@ -85,6 +93,7 @@ def train(
 
         avg_reward = np.mean(episode_rewards)
         all_episode_rewards.append(avg_reward)
+        all_opponent_names.append(opp_name)
         print(
             f"Episode {episode + 1:3d} | vs {opp_name:<16s} | "
             f"avg payoff: {avg_reward:+.4f} | "
@@ -94,9 +103,11 @@ def train(
         if (episode + 1) % checkpoint_every == 0:
             ckpt_path = save_dir / f"ep{episode + 1}.pt"
             agent.save(str(ckpt_path))
+            save_log()
             print(f"  Checkpoint saved: {ckpt_path}")
 
     agent.save(str(final_path))
+    save_log()
     print(f"\nTraining complete. Final model saved to {final_path}")
 
 
@@ -114,12 +125,14 @@ def main() -> None:
         default=0.0,
         help="Max KL regularization weight (0.0 = pure A2C, 0.5 = KL variant)",
     )
-    parser.add_argument("--episodes", type=int, default=50)
-    parser.add_argument("--hands", type=int, default=1000)
+    parser.add_argument("--episodes", type=int, default=200)
+    parser.add_argument("--hands", type=int, default=500)
     parser.add_argument("--checkpoint-every", type=int, default=10)
     parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
 
     train(
         name=args.name,
@@ -128,7 +141,7 @@ def main() -> None:
         hands_per_episode=args.hands,
         checkpoint_every=args.checkpoint_every,
         lr=args.lr,
-        device=args.device,
+        device=device,
     )
 
 
