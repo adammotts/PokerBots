@@ -22,9 +22,8 @@ class Evaluator:
     def run_episode(self) -> np.ndarray:
         '''
         In RL Card, the first env.reset() can either choose the first to act as player ID 0 or 1. Whatever it chooses,
-        it doesn't matter, because the next hand it will switch. The player ID mapping in the evaluator class does not
-        need to be tied to the same ID as that in RL Card every hand. All that needs to happen is that the player IDs
-        must remain the same in the Evaluator class
+        it doesn't matter, because the next hand it will switch. The players map in the Evaluator class ties player ID
+        0 to player ID 0 in RLCard, and player ID 1 to player ID 1 in RLCard
         '''
 
         state = self.env.reset()
