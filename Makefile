@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-ac-pure train-ac-kl train-dqn-calling train-dqn-maniac train-dqn-omc train-dqn-polar evaluate-sessions pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-ac-pure train-ac-kl train-dqn-calling train-dqn-maniac train-dqn-omc train-dqn-polar matchup evaluate-sessions pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -144,7 +144,7 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 PYTHON = python -m main.main
 SESSIONS = python -m evaluation.evaluate_sessions
 
-AGENTS = ac-pure random
+AGENTS = ac-pure dqn-calling random
 OPPONENTS = calling folder maniac omc polar random
 
 MATCHUPS = $(foreach a,$(AGENTS),$(foreach o,$(OPPONENTS),$(a)_vs_$(o)))
@@ -155,6 +155,10 @@ $(MATCHUPS):
 	o=$$(echo $@ | cut -d_ -f3); \
 	echo "Running $$a vs $$o"; \
 	AGENT=$$a OPPONENT=$$o $(UV_RUN) $(PYTHON)
+
+matchup: ## Run one matchup, e.g. make matchup AGENT=dqn-calling OPPONENT=maniac
+	@echo "Running $(AGENT) vs $(OPPONENT)"; \
+	AGENT=$(AGENT) OPPONENT=$(OPPONENT) $(UV_RUN) $(PYTHON)
 
 all: ## Run all agents against all opponents
 	@ALL=1 $(UV_RUN) $(PYTHON)
