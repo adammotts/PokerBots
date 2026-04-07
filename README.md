@@ -72,3 +72,6 @@ uv run python -m evaluation.evaluate_sessions --agents ac:ac_pure dqn:dqn_maniac
 ```
 
 If you omit the prefix, agent names default to actor-critic, so `--agents ac_pure` still works.
+
+For the quick matchup runner in `main.main`, the available learned agent names are
+`ac-pure`, `dqn-calling`, `dqn-maniac`, `dqn-omc`, and `dqn-polar`.

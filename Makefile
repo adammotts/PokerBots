@@ -144,7 +144,7 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 PYTHON = python -m main.main
 SESSIONS = python -m evaluation.evaluate_sessions
 
-AGENTS = ac-pure dqn-calling random
+AGENTS = ac-pure dqn-calling dqn-maniac dqn-omc dqn-polar random
 OPPONENTS = calling folder maniac omc polar random
 
 MATCHUPS = $(foreach a,$(AGENTS),$(foreach o,$(OPPONENTS),$(a)_vs_$(o)))

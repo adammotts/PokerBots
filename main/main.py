@@ -30,6 +30,9 @@ def build_agents() -> dict[str, BasePlayer]:
     return {
         "ac-pure": load_player(parse_agent_spec("ac:ac_pure"), MODELS_DIR),
         "dqn-calling": load_player(parse_agent_spec("dqn:dqn_calling"), MODELS_DIR),
+        "dqn-maniac": load_player(parse_agent_spec("dqn:dqn_maniac"), MODELS_DIR),
+        "dqn-omc": load_player(parse_agent_spec("dqn:dqn_omc"), MODELS_DIR),
+        "dqn-polar": load_player(parse_agent_spec("dqn:dqn_polar"), MODELS_DIR),
         "random": RandomPlayer(),
     }
 
