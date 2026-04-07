@@ -1,10 +1,9 @@
 import os
 from pathlib import Path
 
-from agents.ac_agent import ActorCriticAgent
 from env.env import PokerEnv
 from evaluation.evaluator import Evaluator
-from players.ac_player import ActorCriticPlayer
+from evaluation.model_loader import load_player, parse_agent_spec
 from players.base_player import BasePlayer
 from players.calling_station_player import CallingStationPlayer
 from players.folding_player import FoldingPlayer
@@ -15,14 +14,7 @@ from players.random_player import RandomPlayer
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
-
-ac_agent_pure = ActorCriticAgent()
-ac_agent_pure.load(str(PROJECT_ROOT / "models" / "ac_pure" / "final.pt"))
-
-agents: dict[str, BasePlayer] = {
-    "ac-pure": ActorCriticPlayer(agent=ac_agent_pure),
-    "random": RandomPlayer(),
-}
+MODELS_DIR = PROJECT_ROOT / "models"
 
 opponents: dict[str, BasePlayer] = {
     "calling": CallingStationPlayer(),
@@ -34,8 +26,17 @@ opponents: dict[str, BasePlayer] = {
 }
 
 
+def build_agents() -> dict[str, BasePlayer]:
+    return {
+        "ac-pure": load_player(parse_agent_spec("ac:ac_pure"), MODELS_DIR),
+        "dqn-calling": load_player(parse_agent_spec("dqn:dqn_calling"), MODELS_DIR),
+        "random": RandomPlayer(),
+    }
+
+
 def main() -> None:
     env = PokerEnv()
+    agents = build_agents()
 
     run_all = os.getenv("ALL")
 

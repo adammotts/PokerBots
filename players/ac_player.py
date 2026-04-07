@@ -10,6 +10,12 @@ class ActorCriticPlayer(BasePlayer):
         super().__init__(player_name="ActorCritic")
         self.agent = agent
 
+    def reset_session(self) -> None:
+        self.agent.reset_opponent_state()
+
+    def reset_hand(self) -> None:
+        self.agent.reset_hand_state()
+
     def act(self, state: State) -> int:
         return self.agent.act(
             state=state,

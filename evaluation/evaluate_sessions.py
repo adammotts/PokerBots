@@ -14,41 +14,30 @@ import numpy as np
 import seaborn as sns
 from tqdm import trange
 
-from agents.ac_agent import ActorCriticAgent
 from env.env import PokerEnv
-from players.ac_player import ActorCriticPlayer
+from evaluation.model_loader import load_player, parse_agent_spec
 from players.base_player import BasePlayer
-from players.calling_station_player import CallingStationPlayer
-from players.folding_player import FoldingPlayer
-from players.maniac_player import ManiacPlayer
-from players.old_man_coffee_player import OldManCoffeePlayer
-from players.polarizing_player import PolarizingPlayer
-from players.random_player import RandomPlayer
+from players.opponents import OPPONENT_CLASSES
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
 MODELS_DIR = PROJECT_ROOT / "models"
 BIG_BLIND = 2
 
-OPPONENT_CLASSES: dict[str, type[BasePlayer]] = {
-    "calling": CallingStationPlayer,
-    "folder": FoldingPlayer,
-    "maniac": ManiacPlayer,
-    "omc": OldManCoffeePlayer,
-    "polar": PolarizingPlayer,
-    "random": RandomPlayer,
-}
-
 COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+
+def sanitize_label(label: str) -> str:
+    return label.replace(":", "_")
 
 
 def run_session(
     env: PokerEnv,
-    agent_player: ActorCriticPlayer,
+    agent_player: BasePlayer,
     opponent: BasePlayer,
     num_hands: int,
 ) -> np.ndarray:
-    agent_player.agent.reset_opponent_state()
+    agent_player.reset_session()
     payoffs = np.zeros(num_hands)
     players: dict[int, BasePlayer] = {
         0: agent_player,
@@ -56,6 +45,8 @@ def run_session(
     }
 
     for hand in range(num_hands):
+        for player in players.values():
+            player.reset_hand()
         state = env.reset()
 
         while not env.is_terminal():
@@ -106,13 +97,6 @@ def plot_sessions(
     print(f"Plot saved to {output_path}")
 
 
-def load_agent(name: str) -> ActorCriticPlayer:
-    agent = ActorCriticAgent()
-    model_path = MODELS_DIR / name / "final.pt"
-    agent.load(str(model_path))
-    return ActorCriticPlayer(agent=agent)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate agent adaptation over hands")
     parser.add_argument(
@@ -136,14 +120,18 @@ def main() -> None:
 
     for agent_name in args.agents:
         print(f"\nEvaluating {agent_name} vs {args.opponent}...")
-        agent_player = load_agent(agent_name)
+        agent_spec = parse_agent_spec(agent_name)
+        agent_player = load_player(agent_spec, MODELS_DIR)
         payoffs_2d = np.zeros((args.sessions, args.hands))
 
         for session in trange(args.sessions, desc=f"{agent_name}"):
             opponent = OPPONENT_CLASSES[args.opponent]()
             payoffs_2d[session] = run_session(env, agent_player, opponent, args.hands)
 
-        npz_path = RESULTS_DIR / f"sessions_{agent_name}_vs_{args.opponent}.npz"
+        npz_path = (
+            RESULTS_DIR
+            / f"sessions_{sanitize_label(agent_name)}_vs_{args.opponent}.npz"
+        )
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         np.savez(npz_path, payoffs=payoffs_2d)
         print(f"Data saved to {npz_path}")

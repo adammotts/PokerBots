@@ -23,6 +23,7 @@ htmlcov/
 
 # Model internals (tracked as models.tar.gz instead)
 models
+models.tar.gz
 
 # Misc
 .DS_Store

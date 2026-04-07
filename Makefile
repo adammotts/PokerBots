@@ -16,7 +16,7 @@ else
 endif
 .SHELLFLAGS := -euo pipefail -c
 
-.PHONY: help check-deps sync lint format train-cfr train-cfr train-ac-pure train-ac-kl evaluate-sessions pack-models unpack-models clean-models
+.PHONY: help check-deps sync lint format train-cfr train-ac-pure train-ac-kl train-dqn-calling train-dqn-maniac train-dqn-omc train-dqn-polar matchup evaluate-sessions pack-models unpack-models clean-models
 
 # Colors for output
 GREEN := \033[0;32m
@@ -31,6 +31,8 @@ CROSSMARK := [NO]
 # Project settings
 PROJECT_NAME := pokerbots
 MODELS_ARCHIVE := models.tar.gz
+UV_CACHE_DIR ?= .uv-cache
+UV_RUN = UV_CACHE_DIR=$(UV_CACHE_DIR) uv run
 
 help: ## Show this help message
 	@printf "$(CYAN)====================================================\n$(NC)"
@@ -58,43 +60,59 @@ check-deps: ## Check if all required dependencies are installed
 
 sync: ## Install/sync all dependencies with uv
 	@printf "$(BLUE)Syncing dependencies...\n$(NC)"
-	@uv sync
+	@UV_CACHE_DIR=$(UV_CACHE_DIR) uv sync
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Dependencies synced\n"
 	@printf "\n"
 
 lint: ## Check code linting with Ruff
 	@printf "$(BLUE)Checking linting...\n$(NC)"
-	@uv run ruff check agents/ env/ evaluation/ scripts/ players/ train/
+	@$(UV_RUN) ruff check agents/ env/ evaluation/ players/ train/ main/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting passed\n"
 	@printf "$(BLUE)Checking formatting...\n$(NC)"
-	@uv run ruff format --check agents/ env/ evaluation/ scripts/ players/ train/
+	@$(UV_RUN) ruff format --check agents/ env/ evaluation/ players/ train/ main/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting passed\n"
 	@printf "\n"
 
 format: ## Format code with Ruff
 	@printf "$(BLUE)Fixing linting...\n$(NC)"
-	@uv run ruff check --fix agents/ env/ evaluation/ scripts/ players/ train/
+	@$(UV_RUN) ruff check --fix agents/ env/ evaluation/ players/ train/ main/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting fixed\n"
 	@printf "$(BLUE)Formatting code...\n$(NC)"
-	@uv run ruff format agents/ env/ evaluation/ scripts/ players/ train/
+	@$(UV_RUN) ruff format agents/ env/ evaluation/ players/ train/ main/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting complete\n"
 	@printf "\n"
 
 train-cfr: ## Train OpenSpiel MCCFR agent
 	@printf "$(BLUE)Starting MCCFR training...\n$(NC)\n"
-	@uv run python -m train.train_cfr
+	@$(UV_RUN) python -m train.train_cfr
 
 train-ac-pure: ## Train AC agent (pure A2C, no KL)
 	@printf "$(BLUE)Starting AC pure training...\n$(NC)\n"
-	@uv run python -m train.train_ac --name ac_pure --lambda-kl 0.0
+	@$(UV_RUN) python -m train.train_ac --name ac_pure --lambda-kl 0.0
 
 train-ac-kl: ## Train AC agent (A2C + KL regularization)
 	@printf "$(BLUE)Starting AC KL training...\n$(NC)\n"
-	@uv run python -m train.train_ac --name ac_kl --lambda-kl 0.5
+	@$(UV_RUN) python -m train.train_ac --name ac_kl --lambda-kl 0.5
+
+train-dqn-calling: ## Train Double DQN vs Calling Station
+	@printf "$(BLUE)Starting DQN training vs calling station...\n$(NC)\n"
+	@$(UV_RUN) python -m train.train_dqn --name dqn_calling --opponent calling
+
+train-dqn-maniac: ## Train Double DQN vs Maniac
+	@printf "$(BLUE)Starting DQN training vs maniac...\n$(NC)\n"
+	@$(UV_RUN) python -m train.train_dqn --name dqn_maniac --opponent maniac
+
+train-dqn-omc: ## Train Double DQN vs Old Man Coffee
+	@printf "$(BLUE)Starting DQN training vs old man coffee...\n$(NC)\n"
+	@$(UV_RUN) python -m train.train_dqn --name dqn_omc --opponent omc
+
+train-dqn-polar: ## Train Double DQN vs Polarizing
+	@printf "$(BLUE)Starting DQN training vs polarizing...\n$(NC)\n"
+	@$(UV_RUN) python -m train.train_dqn --name dqn_polar --opponent polar
 
 evaluate-sessions: ## Evaluate agent adaptation over hands (multi-session with CI bands)
 	@printf "$(BLUE)Running session evaluation...\n$(NC)\n"
-	@uv run python -m evaluation.evaluate_sessions $(ARGS)
+	@$(UV_RUN) python -m evaluation.evaluate_sessions $(ARGS)
 
 pack-models: ## Compress models/ into models.tar.gz for git
 	@printf "$(BLUE)Packing models...\n$(NC)"
@@ -126,7 +144,7 @@ clean-models: ## Remove model weights (keeps .tar.gz)
 PYTHON = python -m main.main
 SESSIONS = python -m evaluation.evaluate_sessions
 
-AGENTS = ac-pure random
+AGENTS = ac-pure dqn-calling random
 OPPONENTS = calling folder maniac omc polar random
 
 MATCHUPS = $(foreach a,$(AGENTS),$(foreach o,$(OPPONENTS),$(a)_vs_$(o)))
@@ -136,20 +154,24 @@ $(MATCHUPS):
 	@a=$$(echo $@ | cut -d_ -f1); \
 	o=$$(echo $@ | cut -d_ -f3); \
 	echo "Running $$a vs $$o"; \
-	AGENT=$$a OPPONENT=$$o uv run $(PYTHON)
+	AGENT=$$a OPPONENT=$$o $(UV_RUN) $(PYTHON)
+
+matchup: ## Run one matchup, e.g. make matchup AGENT=dqn-calling OPPONENT=maniac
+	@echo "Running $(AGENT) vs $(OPPONENT)"; \
+	AGENT=$(AGENT) OPPONENT=$(OPPONENT) $(UV_RUN) $(PYTHON)
 
 all: ## Run all agents against all opponents
-	@ALL=1 uv run $(PYTHON)
+	@ALL=1 $(UV_RUN) $(PYTHON)
 
 $(SESSION_MATCHUPS):
 	@target=$$(echo $@ | sed 's/^sessions-//'); \
 	a=$$(echo $$target | cut -d_ -f1); \
 	o=$$(echo $$target | cut -d_ -f3); \
 	echo "Running sessions: $$a vs $$o"; \
-	uv run $(SESSIONS) --agents $$a --opponent $$o
+	$(UV_RUN) $(SESSIONS) --agents $$a --opponent $$o
 
 sessions-all: ## Run session evaluation for all agents against all opponents
 	@for o in $(OPPONENTS); do \
 		echo "Running sessions vs $$o"; \
-		uv run $(SESSIONS) --agents $(AGENTS) --opponent $$o; \
+		$(UV_RUN) $(SESSIONS) --agents $(AGENTS) --opponent $$o; \
 	done

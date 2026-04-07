@@ -48,3 +48,27 @@ results/         # Evaluation plots and logs
 references/      # Papers and project proposal
 docs/            # Architecture documentation
 ```
+
+## Training and Evaluation
+
+Train the recurrent Double DQN best-response agent against a fixed archetype:
+
+```bash
+uv run python -m train.train_dqn --name dqn_maniac --opponent maniac
+```
+
+Useful opponent names include `calling`, `maniac`, `omc`, and `polar`.
+
+Train the adaptive actor-critic agent against the mixed-opponent curriculum:
+
+```bash
+uv run python -m train.train_ac --name ac_pure --lambda-kl 0.0
+```
+
+Evaluate one or more learned agents over many sessions:
+
+```bash
+uv run python -m evaluation.evaluate_sessions --agents ac:ac_pure dqn:dqn_maniac --opponent maniac
+```
+
+If you omit the prefix, agent names default to actor-critic, so `--agents ac_pure` still works.

@@ -26,6 +26,9 @@ class Evaluator:
         0 to player ID 0 in RLCard, and player ID 1 to player ID 1 in RLCard
         '''
 
+        for player in self.players.values():
+            player.reset_hand()
+
         state = self.env.reset()
 
         while not self.env.is_terminal():
@@ -36,6 +39,8 @@ class Evaluator:
 
     def run_matchup(self, *, num_episodes: int) -> np.ndarray:
         rewards = np.zeros(num_episodes)
+        for player in self.players.values():
+            player.reset_session()
         for episode_num in trange(num_episodes, desc="Evaluating"):
             payoffs = self.run_episode()
 
