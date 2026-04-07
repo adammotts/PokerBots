@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
-from agents.ac_agent.features import build_features, build_opponent_summary
+from agents.ac_agent.features import build_opponent_summary
 from agents.ac_agent.networks import (
     ActorNetwork,
     ConfidenceGate,
@@ -17,6 +17,7 @@ from agents.ac_agent.networks import (
     OpponentLSTM,
 )
 from agents.base_agent import BaseAgent, Transition
+from agents.features import build_features
 from env.state import State
 
 
@@ -90,6 +91,14 @@ class ActorCriticAgent(BaseAgent):
     def reset_opponent_state(self) -> None:
         """Reset opponent model. Call at the start of each new session."""
         self._opp_hidden = self.opponent_lstm.init_hidden(self.device)
+        self.reset_hand_state()
+
+    def reset_hand_state(self) -> None:
+        """Reset within-hand recurrent state."""
+        self._game_hidden_actor = None
+        self._game_hidden_critic = None
+        self._trajectory.clear()
+        self._action_record = []
 
     def _reset_hand(self) -> None:
         """Reset per-hand state for a new hand."""

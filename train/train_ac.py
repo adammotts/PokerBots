@@ -12,26 +12,11 @@ from tqdm import trange
 
 from agents.ac_agent import ActorCriticAgent
 from env.env import PokerEnv
-from players.base_player import BasePlayer
-from players.calling_station_player import CallingStationPlayer
-from players.maniac_player import ManiacPlayer
-from players.old_man_coffee_player import OldManCoffeePlayer
-from players.polarizing_player import PolarizingPlayer
+from players.opponents import make_opponent
 from train.play_hand import play_hand
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
-
-OPPONENTS: dict[str, type[BasePlayer]] = {
-    "calling_station": CallingStationPlayer,
-    "maniac": ManiacPlayer,
-    "old_man_coffee": OldManCoffeePlayer,
-    "polarizing": PolarizingPlayer,
-}
-
-
-def make_opponent(name: str) -> BasePlayer:
-    return OPPONENTS[name]()
 
 
 def train(
@@ -60,7 +45,7 @@ def train(
         agent.load(str(final_path))
 
     env = PokerEnv()
-    opponent_names = list(OPPONENTS.keys())
+    opponent_names = ["calling_station", "maniac", "old_man_coffee", "polarizing"]
 
     all_episode_rewards: list[float] = []
     all_opponent_names: list[str] = []
