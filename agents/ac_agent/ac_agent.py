@@ -16,6 +16,7 @@ from agents.ac_agent.networks import (
     CriticNetwork,
     OpponentLSTM,
 )
+from agents.ac_agent.rollout import HandRollout, StepData
 from agents.base_agent import BaseAgent, Transition
 from agents.features import build_features
 from env.state import State
@@ -43,6 +44,8 @@ class ActorCriticAgent(BaseAgent):
         entropy_coef: float = 0.01,
         value_coef: float = 0.5,
         grad_clip: float = 0.5,
+        ppo_epochs: int = 4,
+        clip_eps: float = 0.2,
         device: str = "cpu",
     ) -> None:
         self.device = device
@@ -51,6 +54,8 @@ class ActorCriticAgent(BaseAgent):
         self.entropy_coef = entropy_coef
         self.value_coef = value_coef
         self.grad_clip = grad_clip
+        self.ppo_epochs = ppo_epochs
+        self.clip_eps = clip_eps
 
         # Networks
         self.actor = ActorNetwork().to(device)
@@ -83,6 +88,12 @@ class ActorCriticAgent(BaseAgent):
         self._action_record: list[tuple[int, str]] = []
         self._our_player_id: int = 0
 
+        # PPO rollout collection state
+        self._collecting: bool = False
+        self._collect_steps: list[StepData] = []
+        self._rollout: list[HandRollout] = []
+        self._opp_hidden_rollout_start: tuple[torch.Tensor, torch.Tensor] | None = None
+
         # CFR agent for KL target (lazy-loaded)
         self._cfr_agent: object | None = None
 
@@ -110,7 +121,7 @@ class ActorCriticAgent(BaseAgent):
     def _get_opp_context(self) -> torch.Tensor:
         """Get opponent context vector (detached) for actor/critic input."""
         # h component of hidden state: (1, 1, 32) -> (1, 32)
-        return self._opp_hidden[0].detach().squeeze(0)
+        return self._opp_hidden[0].squeeze(0)
 
     # ── BaseAgent interface ──────────────────────────────────────────
 
@@ -157,6 +168,15 @@ class ActorCriticAgent(BaseAgent):
                     dist.entropy(),
                 )
             )
+            if self._collecting:
+                self._collect_steps.append(
+                    StepData(
+                        features=features.detach(),
+                        action=int(action.item()),
+                        log_prob_old=dist.log_prob(action).detach().item(),
+                        legal_mask=mask.clone(),
+                    )
+                )
         else:
             action = masked_logits.argmax()
 
@@ -195,6 +215,8 @@ class ActorCriticAgent(BaseAgent):
 
         # Advantages
         advantages = (returns_t - values_t).detach()
+        if advantages.numel() > 1:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # Policy loss (REINFORCE with baseline)
         policy_loss = -(log_probs_t * advantages).mean()
@@ -233,6 +255,11 @@ class ActorCriticAgent(BaseAgent):
         nn.utils.clip_grad_norm_(all_params, self.grad_clip)
         self.optimizer.step()
 
+        self._opp_hidden = (
+            self._opp_hidden[0].detach(),
+            self._opp_hidden[1].detach(),
+        )
+
         # Step opponent LSTM with hand summary
         self._step_opponent_lstm()
 
@@ -240,6 +267,144 @@ class ActorCriticAgent(BaseAgent):
         self._game_hidden_actor = None
         self._game_hidden_critic = None
         self._trajectory.clear()
+
+    # ── PPO rollout collection ─────────────────────────────────────
+
+    def begin_collect(self) -> None:
+        self._collecting = True
+        self._rollout = []
+        self._collect_steps = []
+        self._opp_hidden_rollout_start = (
+            self._opp_hidden[0].detach().clone(),
+            self._opp_hidden[1].detach().clone(),
+        )
+
+    def finish_hand_collect(self) -> None:
+        went_to_showdown = not any(
+            action_str == "fold" for _, action_str in self._action_record
+        )
+        summary = build_opponent_summary(
+            self._action_record,
+            self._our_player_id,
+            self._hand_reward,
+            went_to_showdown,
+            self.device,
+        )
+        self._rollout.append(
+            HandRollout(
+                steps=self._collect_steps,
+                reward=self._hand_reward,
+                hand_summary=summary.detach(),
+            )
+        )
+        self._collect_steps = []
+        with torch.no_grad():
+            summary_input = summary.unsqueeze(0).unsqueeze(0)
+            _, self._opp_hidden = self.opponent_lstm(summary_input, self._opp_hidden)
+        self._opp_hidden = (
+            self._opp_hidden[0].detach(),
+            self._opp_hidden[1].detach(),
+        )
+        self._game_hidden_actor = None
+        self._game_hidden_critic = None
+        self._trajectory.clear()
+        self._action_record = []
+
+    def ppo_update(self) -> None:
+        rollout = self._rollout
+        if not rollout or self._opp_hidden_rollout_start is None:
+            self._collecting = False
+            return
+
+        all_returns: list[float] = []
+        all_log_probs_old: list[float] = []
+        for hand in rollout:
+            for step in hand.steps:
+                all_returns.append(hand.reward)
+                all_log_probs_old.append(step.log_prob_old)
+
+        if not all_returns:
+            self._collecting = False
+            return
+
+        returns_t = torch.tensor(all_returns, dtype=torch.float32, device=self.device)
+        log_probs_old_t = torch.tensor(
+            all_log_probs_old, dtype=torch.float32, device=self.device
+        )
+
+        all_params = (
+            list(self.actor.parameters())
+            + list(self.critic.parameters())
+            + list(self.opponent_lstm.parameters())
+        )
+        if self.confidence_gate is not None:
+            all_params.extend(self.confidence_gate.parameters())
+
+        for _epoch in range(self.ppo_epochs):
+            opp_hidden = (
+                self._opp_hidden_rollout_start[0].clone(),
+                self._opp_hidden_rollout_start[1].clone(),
+            )
+
+            all_log_probs_new: list[torch.Tensor] = []
+            all_values: list[torch.Tensor] = []
+            all_entropies: list[torch.Tensor] = []
+
+            for hand in rollout:
+                opp_context = opp_hidden[0].squeeze(0)
+                game_h_a = self.actor.init_game_hidden(self.device)
+                game_h_c = self.critic.init_game_hidden(self.device)
+
+                for step in hand.steps:
+                    logits, game_h_a = self.actor(step.features, game_h_a, opp_context)
+                    value, game_h_c = self.critic(step.features, game_h_c, opp_context)
+                    masked_logits = logits.squeeze(0) + step.legal_mask
+                    dist = Categorical(logits=masked_logits)
+                    action_t = torch.tensor(step.action, device=self.device)
+                    all_log_probs_new.append(dist.log_prob(action_t))
+                    all_values.append(value.squeeze())
+                    all_entropies.append(dist.entropy())
+
+                summary_input = hand.hand_summary.unsqueeze(0).unsqueeze(0)
+                _, opp_hidden = self.opponent_lstm(summary_input, opp_hidden)
+
+            log_probs_new_t = torch.stack(all_log_probs_new)
+            values_t = torch.stack(all_values)
+            entropies_t = torch.stack(all_entropies)
+
+            advantages = (returns_t - values_t).detach()
+            if advantages.numel() > 1:
+                advantages = (advantages - advantages.mean()) / (
+                    advantages.std() + 1e-8
+                )
+
+            ratio = torch.exp(log_probs_new_t - log_probs_old_t)
+            surr1 = ratio * advantages
+            surr2 = (
+                torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * advantages
+            )
+            policy_loss = -torch.min(surr1, surr2).mean()
+
+            value_loss = F.mse_loss(values_t, returns_t)
+            entropy_loss = -entropies_t.mean()
+
+            total_loss = (
+                policy_loss
+                + self.value_coef * value_loss
+                + self.entropy_coef * entropy_loss
+            )
+
+            self.optimizer.zero_grad()
+            total_loss.backward()
+            nn.utils.clip_grad_norm_(all_params, self.grad_clip)
+            self.optimizer.step()
+
+            opp_hidden = (opp_hidden[0].detach(), opp_hidden[1].detach())
+
+        self._rollout = []
+        self._collecting = False
+
+    # ── Persistence ──────────────────────────────────────────────
 
     def save(self, path: str) -> None:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
@@ -282,8 +447,7 @@ class ActorCriticAgent(BaseAgent):
         )
         # (8,) -> (1, 1, 8)
         summary_input = summary.unsqueeze(0).unsqueeze(0)
-        with torch.no_grad():
-            _, self._opp_hidden = self.opponent_lstm(summary_input, self._opp_hidden)
+        _, self._opp_hidden = self.opponent_lstm(summary_input, self._opp_hidden)
 
     def _compute_kl_loss(
         self,
@@ -329,6 +493,16 @@ class ActorCriticAgent(BaseAgent):
         if not kl_values:
             return None
         return torch.stack(kl_values).mean()
+
+    def step_opponent_after_hand(
+        self,
+        action_record: list[tuple[int, str]],
+        payoff: float,
+    ) -> None:
+        self._action_record = action_record
+        self._hand_reward = payoff
+        with torch.no_grad():
+            self._step_opponent_lstm()
 
     def set_cfr_agent(self, cfr_agent: object) -> None:
         """Set the CFR agent used as KL target during training."""
