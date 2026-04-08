@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from agents.dqn_agent.features import STATE_DIM
 
 class QNetwork(nn.Module):
     """Recurrent Q-network for partially observed limit hold'em."""
@@ -10,7 +11,7 @@ class QNetwork(nn.Module):
     def __init__(
         self,
         *,
-        state_dim: int = 77,
+        state_dim: int = STATE_DIM,
         hidden_dim: int = 128,
         num_actions: int = 4,
     ) -> None:
