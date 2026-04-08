@@ -41,6 +41,7 @@ def train(
     rollout_size: int,
     ppo_epochs: int,
     clip_eps: float,
+    aux_coef: float,
     device: str,
 ) -> None:
     save_dir = MODELS_DIR / name
@@ -51,6 +52,7 @@ def train(
         lr=lr,
         ppo_epochs=ppo_epochs,
         clip_eps=clip_eps,
+        aux_coef=aux_coef,
         device=device,
     )
 
@@ -223,6 +225,7 @@ def main() -> None:
     parser.add_argument("--rollout-size", type=int, default=128)
     parser.add_argument("--ppo-epochs", type=int, default=3)
     parser.add_argument("--clip-eps", type=float, default=0.2)
+    parser.add_argument("--aux-coef", type=float, default=0.5)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -239,6 +242,7 @@ def main() -> None:
         rollout_size=args.rollout_size,
         ppo_epochs=args.ppo_epochs,
         clip_eps=args.clip_eps,
+        aux_coef=args.aux_coef,
         device=device,
     )
 

@@ -33,6 +33,8 @@ def plot_training(
 ) -> None:
     unique_opps = sorted(set(opponents))
     opp_counts = {opp: int(np.sum(opponents == opp)) for opp in unique_opps}
+    sns.set_theme(style="darkgrid")
+
     has_early_late = (
         early_rewards is not None
         and late_rewards is not None
@@ -119,7 +121,6 @@ def plot_training(
         )
         ax3.legend()
 
-    sns.set_theme(style="darkgrid")
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(str(output_path), dpi=150)
