@@ -9,10 +9,10 @@ A value-based exploitative agent for Heads-Up Limit Texas Hold'em. Unlike the ad
 ## Architecture
 
 ```
-              state features (77-dim)
+              state features (90-dim)
                        │
                ┌───────▼───────┐
-               │   FC 77→128   │
+               │   FC 90→128   │
                └───────┬───────┘
                        │
                ┌───────▼───────┐
@@ -35,7 +35,7 @@ A value-based exploitative agent for Heads-Up Limit Texas Hold'em. Unlike the ad
 
 | Component | Parameters | Role | Lifecycle |
 |---|---|---|---|
-| Feedforward trunk | ~26k | Encodes RLCard observation and legal-action context | Runs every decision |
+| Feedforward trunk | ~28k | Encodes RLCard observation, hand-strength features, and legal-action context | Runs every decision |
 | Game LSTM | ~132k | Captures betting history within a hand | Resets every hand |
 | Q head | ~516 | Maps latent state to 4 action values | Runs every decision |
 | Target network | duplicate of online Q-network | Stabilizes temporal-difference targets | Synced periodically |
@@ -77,15 +77,19 @@ So the recurrent state is only used for **within-hand partial observability**. C
 
 ## Input Features
 
-The DQN reuses the shared 77-dimensional feature vector:
+The DQN now uses a DQN-specific 90-dimensional feature vector rather than the shared actor-critic feature path:
 
 | Feature | Dimensions | Source |
 |---|---|---|
 | RLCard obs vector | 72 | Card one-hots + environment encoding |
+| Hand rank one-hot | 10 | Engineered from hole cards + board |
+| Draw flags | 3 | Flush draw, straight draw, boat draw |
 | Legal action mask | 4 | Binary mask over legal actions |
 | Player position | 1 | 0 = small blind, 1 = big blind |
 
-The legal-action mask is part of the network input and is also used again when selecting actions so illegal moves are never chosen.
+These engineered features are intended to reduce how much raw poker hand semantics the DQN has to discover from scratch. The legal-action mask is part of the network input and is also used again when selecting actions so illegal moves are never chosen.
+
+The actor-critic agent still uses the older shared 77-dimensional feature vector. This DQN-only split keeps the hand-strength experiment isolated to the value-based agent.
 
 ## Training Flow
 
@@ -185,6 +189,8 @@ Reward is only assigned at the end of the hand, and hands are short. Using `gamm
 
 The DQN plugs into the same hand simulator used by the other agents. The key extension was making the hand runner emit **stepwise transitions** instead of only a terminal summary. That lets value-based learning work without creating a separate environment wrapper.
 
+The shared hand runner now checks whether an agent provides its own feature builder. The DQN uses that hook to append engineered hand-strength features without changing the actor-critic training path.
+
 ### Opponent selection
 
 Opponent creation was centralized in a shared registry so both actor-critic and DQN training can use the same archetype names.
@@ -224,6 +230,7 @@ There are a few important caveats in the current setup:
 2. The LSTM state is reset every hand, so this model learns a per-archetype exploit, not a session-adaptive exploit.
 3. The replay samples full hands uniformly; it does not prioritize rare or high-error situations.
 4. The training target is built from the next agent decision point, not every environment micro-step, which is a reasonable abstraction here but still a modeling choice.
+5. The current engineered hand-strength features are intentionally coarse. They help with made-hand and draw recognition, but they do not fully encode kicker quality, blockers, or board texture.
 
 ## Future Improvements
 
