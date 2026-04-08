@@ -1,10 +1,10 @@
-# Recurrent Double DQN for Exploitative Best Response
+# Recurrent Dueling Double DQN for Exploitative Best Response
 
 ## Overview
 
 A value-based exploitative agent for Heads-Up Limit Texas Hold'em. Unlike the adaptive actor-critic agent, this model is trained against one **fixed opponent archetype at a time** and is meant to learn a strong best response to that specific style.
 
-**Hypothesis:** when the opponent is fixed and the action space is discrete, Double DQN can learn a profitable counter-strategy with a simpler training setup than policy-gradient methods.
+**Hypothesis:** when the opponent is fixed and the action space is discrete, a dueling Double DQN can learn a profitable counter-strategy with a simpler training setup than policy-gradient methods.
 
 ## Architecture
 
@@ -24,11 +24,15 @@ A value-based exploitative agent for Heads-Up Limit Texas Hold'em. Unlike the ad
                │   128 hidden   │
                └───────┬───────┘
                        │
-               ┌───────▼───────┐
-               │  Linear 128→4 │
-               └───────┬───────┘
+             ┌─────────▼─────────┐
+             │ Value head 128→1  │
+             └─────────┬─────────┘
                        │
-             Q(s, call / raise / fold / check)
+             ┌─────────▼─────────┐
+             │Advantage 128→4    │
+             └─────────┬─────────┘
+                       │
+          Q(s,a)=V(s)+(A(s,a)-mean_a A(s,a))
 ```
 
 ### Components
@@ -37,7 +41,7 @@ A value-based exploitative agent for Heads-Up Limit Texas Hold'em. Unlike the ad
 |---|---|---|---|
 | Feedforward trunk | ~28k | Encodes RLCard observation, hand-strength features, and legal-action context | Runs every decision |
 | Game LSTM | ~132k | Captures betting history within a hand | Resets every hand |
-| Q head | ~516 | Maps latent state to 4 action values | Runs every decision |
+| Dueling heads | ~645 | Separates state value from action-specific advantage | Runs every decision |
 | Target network | duplicate of online Q-network | Stabilizes temporal-difference targets | Synced periodically |
 
 ## Why This Design
@@ -54,6 +58,15 @@ Plain DQN tends to overestimate action values because the same network both sele
 2. The **target** network evaluates that chosen action.
 
 That separation is especially useful here because poker rewards are sparse and noisy, so optimistic bias can be costly.
+
+### Why dueling heads?
+
+Many poker decisions are driven by two related questions:
+
+1. how good is this state overall?
+2. which legal action is best in this state?
+
+A dueling network reflects that structure by learning a scalar **state value** `V(s)` and an **advantage** term `A(s, a)` for each action, then combining them into Q-values. That is a modest upgrade over a single linear Q-head and often helps when multiple actions are similar in value.
 
 ### Why a recurrent Q-network?
 
@@ -211,13 +224,14 @@ This keeps the plotting and benchmarking infrastructure shared across approaches
 - Fits naturally to the discrete action space
 - Exploits fixed archetypes without needing opponent classification
 - Uses recurrence where it matters most: within-hand betting history
+- Uses dueling heads to separate state value from action preference
 - Reuses the repo's existing training and evaluation infrastructure
 
 ### What it intentionally does not do
 
 - It does **not** adapt across hands to infer an unknown opponent
 - It does **not** use prioritized replay
-- It does **not** use dueling heads, n-step returns, or distributional RL
+- It does **not** use n-step returns or distributional RL
 - It does **not** model belief state explicitly beyond recurrent hidden state
 
 Those omissions were intentional to keep the first DQN version understandable, debuggable, and easy to compare against the actor-critic baseline.
@@ -236,8 +250,8 @@ There are a few important caveats in the current setup:
 
 If we want to push this further, the most promising next steps are:
 
-1. Add dueling Double DQN heads for better value/advantage separation.
-2. Add prioritized episode replay.
-3. Add n-step returns across the hand.
+1. Add prioritized episode replay.
+2. Add n-step returns across the hand.
+3. Add a distributional value head for a more Rainbow-like target.
 4. Add an opponent-summary module across hands for a hybrid adaptive DQN.
 5. Compare per-archetype DQN directly against CFR and AC in the same evaluation plots.

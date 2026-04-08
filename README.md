@@ -12,9 +12,9 @@ This project investigates whether deep RL agents can learn to identify and explo
 
 Nash equilibrium solver via OpenSpiel. Plays optimally in expectation against any opponent but does not adapt or exploit. Computationally expensive at both training and inference time.
 
-### Double DQN + LSTM (Adam)
+### Dueling Double DQN + LSTM (Adam)
 
-Value-based best-response agent. The LSTM encodes betting history within a hand to handle partial observability. Trained via epsilon-greedy exploration against a fixed opponent archetype. Hypothesis: learns a near-optimal counter-strategy for each specific archetype.
+Value-based best-response agent. A dueling Double DQN learns state value and action advantage while an LSTM encodes betting history within a hand to handle partial observability. Trained via epsilon-greedy exploration against a fixed opponent archetype. Hypothesis: learns a near-optimal counter-strategy for each specific archetype.
 
 ### Adaptive Actor-Critic with Opponent Modeling (Ben)
 

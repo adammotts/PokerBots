@@ -26,7 +26,7 @@ def _detach_hidden(
 
 
 class DoubleDQNAgent(BaseAgent):
-    """Exploitative recurrent Double DQN agent."""
+    """Exploitative recurrent Double DQN agent with a dueling Q-head."""
 
     def __init__(
         self,
