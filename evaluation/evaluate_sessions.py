@@ -14,6 +14,7 @@ import numpy as np
 import seaborn as sns
 from tqdm import trange
 
+from env.action import ACTION_NAMES
 from env.env import PokerEnv
 from evaluation.model_loader import load_player, parse_agent_spec
 from players.base_player import BasePlayer
@@ -50,10 +51,17 @@ def run_session(
         state = env.reset()
 
         while not env.is_terminal():
-            action = players[state.player_id].act(state)
+            pid = state.player_id
+            action = players[pid].act(state)
+            if hasattr(agent_player, "record_action"):
+                agent_player.record_action(pid, ACTION_NAMES[action])
             state = env.step(action)
 
-        payoffs[hand] = env.get_payoffs()[0]
+        payoff = env.get_payoffs()[0]
+        payoffs[hand] = payoff
+
+        if hasattr(agent_player, "end_hand"):
+            agent_player.end_hand(payoff)
 
     return payoffs
 

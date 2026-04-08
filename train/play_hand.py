@@ -6,11 +6,9 @@ import numpy as np
 
 from agents.base_agent import BaseAgent, Transition
 from agents.features import build_features
-from env.action import Action
+from env.action import ACTION_NAMES
 from env.env import PokerEnv
 from players.base_player import BasePlayer
-
-ACTION_NAMES = {a.value: a.name.lower() for a in Action}
 
 
 def play_hand(
