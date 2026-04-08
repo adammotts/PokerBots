@@ -18,3 +18,4 @@ class HandRollout:
     steps: list[StepData] = field(default_factory=list)
     reward: float = 0.0
     hand_summary: torch.Tensor = field(default_factory=lambda: torch.zeros(8))
+    opp_freq_target: torch.Tensor = field(default_factory=lambda: torch.zeros(4))

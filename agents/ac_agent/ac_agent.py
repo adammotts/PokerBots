@@ -15,6 +15,7 @@ from agents.ac_agent.networks import (
     ConfidenceGate,
     CriticNetwork,
     OpponentLSTM,
+    OpponentPredictor,
 )
 from agents.ac_agent.rollout import HandRollout, StepData
 from agents.base_agent import BaseAgent, Transition
@@ -46,6 +47,7 @@ class ActorCriticAgent(BaseAgent):
         grad_clip: float = 0.5,
         ppo_epochs: int = 4,
         clip_eps: float = 0.2,
+        aux_coef: float = 0.5,
         device: str = "cpu",
     ) -> None:
         self.device = device
@@ -56,11 +58,13 @@ class ActorCriticAgent(BaseAgent):
         self.grad_clip = grad_clip
         self.ppo_epochs = ppo_epochs
         self.clip_eps = clip_eps
+        self.aux_coef = aux_coef
 
         # Networks
         self.actor = ActorNetwork().to(device)
         self.critic = CriticNetwork().to(device)
         self.opponent_lstm = OpponentLSTM().to(device)
+        self.opp_predictor = OpponentPredictor().to(device)
         self.confidence_gate: ConfidenceGate | None = None
         if lambda_kl_max > 0:
             self.confidence_gate = ConfidenceGate().to(device)
@@ -70,6 +74,7 @@ class ActorCriticAgent(BaseAgent):
             *self.actor.parameters(),
             *self.critic.parameters(),
             *self.opponent_lstm.parameters(),
+            *self.opp_predictor.parameters(),
         ]
         if self.confidence_gate is not None:
             params.extend(self.confidence_gate.parameters())
@@ -88,6 +93,9 @@ class ActorCriticAgent(BaseAgent):
         self._action_record: list[tuple[int, str]] = []
         self._our_player_id: int = 0
 
+        # Cumulative opponent action counts (reset per session)
+        self._opp_action_counts = np.zeros(4, dtype=np.float32)
+
         # PPO rollout collection state
         self._collecting: bool = False
         self._collect_steps: list[StepData] = []
@@ -102,6 +110,7 @@ class ActorCriticAgent(BaseAgent):
     def reset_opponent_state(self) -> None:
         """Reset opponent model. Call at the start of each new session."""
         self._opp_hidden = self.opponent_lstm.init_hidden(self.device)
+        self._opp_action_counts = np.zeros(4, dtype=np.float32)
         self.reset_hand_state()
 
     def reset_hand_state(self) -> None:
@@ -290,11 +299,21 @@ class ActorCriticAgent(BaseAgent):
             went_to_showdown,
             self.device,
         )
+        action_map = {"call": 0, "raise": 1, "fold": 2, "check": 3}
+        for pid, action_str in self._action_record:
+            if pid != self._our_player_id:
+                idx = action_map.get(action_str)
+                if idx is not None:
+                    self._opp_action_counts[idx] += 1
+        total = self._opp_action_counts.sum()
+        freq = self._opp_action_counts / max(total, 1.0)
+        opp_freq_target = torch.tensor(freq, dtype=torch.float32, device=self.device)
         self._rollout.append(
             HandRollout(
                 steps=self._collect_steps,
                 reward=self._hand_reward,
                 hand_summary=summary.detach(),
+                opp_freq_target=opp_freq_target,
             )
         )
         self._collect_steps = []
@@ -336,6 +355,7 @@ class ActorCriticAgent(BaseAgent):
             list(self.actor.parameters())
             + list(self.critic.parameters())
             + list(self.opponent_lstm.parameters())
+            + list(self.opp_predictor.parameters())
         )
         if self.confidence_gate is not None:
             all_params.extend(self.confidence_gate.parameters())
@@ -349,6 +369,7 @@ class ActorCriticAgent(BaseAgent):
             all_log_probs_new: list[torch.Tensor] = []
             all_values: list[torch.Tensor] = []
             all_entropies: list[torch.Tensor] = []
+            aux_losses: list[torch.Tensor] = []
 
             for hand in rollout:
                 opp_context = opp_hidden[0].squeeze(0)
@@ -367,6 +388,11 @@ class ActorCriticAgent(BaseAgent):
 
                 summary_input = hand.hand_summary.unsqueeze(0).unsqueeze(0)
                 _, opp_hidden = self.opponent_lstm(summary_input, opp_hidden)
+
+                predicted_freq = self.opp_predictor(opp_hidden[0].squeeze(0))
+                aux_losses.append(
+                    F.mse_loss(predicted_freq.squeeze(0), hand.opp_freq_target)
+                )
 
             log_probs_new_t = torch.stack(all_log_probs_new)
             values_t = torch.stack(all_values)
@@ -394,6 +420,10 @@ class ActorCriticAgent(BaseAgent):
                 + self.entropy_coef * entropy_loss
             )
 
+            if aux_losses:
+                aux_loss = torch.stack(aux_losses).mean()
+                total_loss = total_loss + self.aux_coef * aux_loss
+
             self.optimizer.zero_grad()
             total_loss.backward()
             nn.utils.clip_grad_norm_(all_params, self.grad_clip)
@@ -412,6 +442,7 @@ class ActorCriticAgent(BaseAgent):
             "actor": self.actor.state_dict(),
             "critic": self.critic.state_dict(),
             "opponent_lstm": self.opponent_lstm.state_dict(),
+            "opp_predictor": self.opp_predictor.state_dict(),
             "optimizer": self.optimizer.state_dict(),
         }
         if self.confidence_gate is not None:
@@ -427,7 +458,12 @@ class ActorCriticAgent(BaseAgent):
         self.actor.load_state_dict(checkpoint["actor"])
         self.critic.load_state_dict(checkpoint["critic"])
         self.opponent_lstm.load_state_dict(checkpoint["opponent_lstm"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        if "opp_predictor" in checkpoint:
+            self.opp_predictor.load_state_dict(checkpoint["opp_predictor"])
+        try:
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
+        except ValueError:
+            print("  Optimizer state mismatch (new params added), resetting optimizer")
         if self.confidence_gate is not None and "confidence_gate" in checkpoint:
             self.confidence_gate.load_state_dict(checkpoint["confidence_gate"])
 

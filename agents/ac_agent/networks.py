@@ -127,6 +127,17 @@ class CriticNetwork(nn.Module):
         )
 
 
+class OpponentPredictor(nn.Module):
+    def __init__(self, opp_hidden_size: int = 32, num_actions: int = 4) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(opp_hidden_size, 16)
+        self.fc2 = nn.Linear(16, num_actions)
+
+    def forward(self, opp_hidden_h: torch.Tensor) -> torch.Tensor:
+        x = torch.relu(self.fc1(opp_hidden_h))
+        return torch.softmax(self.fc2(x), dim=-1)
+
+
 class ConfidenceGate(nn.Module):
     """Learned confidence signal from the opponent LSTM hidden state.
 
