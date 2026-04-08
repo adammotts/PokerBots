@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 from tqdm import trange
 
+from env.action import ACTION_NAMES
 from env.env import PokerEnv
 from players.base_player import BasePlayer
 
@@ -20,11 +21,11 @@ class Evaluator:
         }
 
     def run_episode(self) -> np.ndarray:
-        '''
+        """
         In RL Card, the first env.reset() can either choose the first to act as player ID 0 or 1. Whatever it chooses,
         it doesn't matter, because the next hand it will switch. The players map in the Evaluator class ties player ID
         0 to player ID 0 in RLCard, and player ID 1 to player ID 1 in RLCard
-        '''
+        """
 
         for player in self.players.values():
             player.reset_hand()
@@ -32,10 +33,20 @@ class Evaluator:
         state = self.env.reset()
 
         while not self.env.is_terminal():
-            action = self.players[state.player_id].act(state)
+            pid = state.player_id
+            action = self.players[pid].act(state)
+            for player in self.players.values():
+                if hasattr(player, "record_action"):
+                    player.record_action(pid, ACTION_NAMES[action])
             state = self.env.step(action)
 
-        return self.env.get_payoffs()
+        payoffs = self.env.get_payoffs()
+
+        for i, player in self.players.items():
+            if hasattr(player, "end_hand"):
+                player.end_hand(float(payoffs[i]))
+
+        return payoffs
 
     def run_matchup(self, *, num_episodes: int) -> np.ndarray:
         rewards = np.zeros(num_episodes)
