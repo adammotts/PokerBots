@@ -1,5 +1,3 @@
-"""Train the Actor-Critic agent with PPO (or A2C) against opponent archetypes."""
-
 from __future__ import annotations
 
 import argparse
@@ -32,27 +30,28 @@ def pick_opponent(
 def train(
     *,
     name: str,
-    lambda_kl_max: float,
     num_episodes: int,
     hands_per_episode: int,
     checkpoint_every: int,
     lr: float,
-    ppo: bool,
     rollout_size: int,
     ppo_epochs: int,
     clip_eps: float,
     aux_coef: float,
+    entropy_coef: float,
+    extra_critic_steps: int,
     device: str,
 ) -> None:
     save_dir = MODELS_DIR / name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     agent = ActorCriticAgent(
-        lambda_kl_max=lambda_kl_max,
         lr=lr,
         ppo_epochs=ppo_epochs,
         clip_eps=clip_eps,
         aux_coef=aux_coef,
+        entropy_coef=entropy_coef,
+        extra_critic_steps=extra_critic_steps,
         device=device,
     )
 
@@ -109,10 +108,10 @@ def train(
             late,
         )
 
-    mode = "PPO" if ppo else "A2C"
     print(
-        f"{mode} training: rollout={rollout_size}, epochs={ppo_epochs}, "
-        f"clip={clip_eps}, lr={lr}, LR/entropy decay enabled"
+        f"PPO training: rollout={rollout_size}, epochs={ppo_epochs}, "
+        f"clip={clip_eps}, lr={lr}, entropy={entropy_coef}, "
+        f"aux={aux_coef}, extra_critic={extra_critic_steps}"
     )
 
     opp_counts: dict[str, int] = {}
@@ -129,41 +128,34 @@ def train(
         opponent = make_opponent(opp_name)
         agent.reset_opponent_state()
 
-        frac = 1.0 - episode / max(num_episodes - 1, 1)
-        current_lr = lr * max(frac, 0.05)
-        for pg in agent.optimizer.param_groups:
-            pg["lr"] = current_lr
-        agent.entropy_coef = 0.01 * max(frac, 0.1)
+        current_lr = lr
 
         episode_rewards: list[float] = []
 
-        if ppo:
-            hand = 0
-            pbar = trange(
-                hands_per_episode,
-                desc=f"Ep {episode + 1}/{num_episodes} vs {opp_name}",
-                leave=False,
-            )
-            while hand < hands_per_episode:
-                batch = min(rollout_size, hands_per_episode - hand)
-                agent.begin_collect()
-                for _ in range(batch):
-                    payoff = play_hand(env, agent, opponent)
-                    agent.finish_hand_collect()
-                    episode_rewards.append(payoff)
-                    hand += 1
-                    pbar.update(1)
-                agent.ppo_update()
-            pbar.close()
-        else:
-            for _ in trange(
-                hands_per_episode,
-                desc=f"Ep {episode + 1}/{num_episodes} vs {opp_name}",
-                leave=False,
-            ):
+        hand = 0
+        pbar = trange(
+            hands_per_episode,
+            desc=f"Ep {episode + 1}/{num_episodes} vs {opp_name}",
+            leave=False,
+        )
+        while hand < hands_per_episode:
+            batch = min(rollout_size, hands_per_episode - hand)
+            agent.begin_collect()
+            for _ in range(batch):
                 payoff = play_hand(env, agent, opponent)
-                agent.update()
+                agent.finish_hand_collect()
                 episode_rewards.append(payoff)
+                hand += 1
+                pbar.update(1)
+            diag = agent.ppo_update()
+            if diag and hand <= rollout_size:
+                print(
+                    f"  [diag] policy={diag['policy_loss']:.4f} "
+                    f"value={diag['value_loss']:.4f} "
+                    f"entropy={diag['entropy']:.4f} "
+                    f"aux={diag['aux_loss']:.4f}"
+                )
+        pbar.close()
 
         mid = len(episode_rewards) // 2
         avg_reward = np.mean(episode_rewards)
@@ -192,40 +184,22 @@ def train(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train Actor-Critic agent")
+    parser = argparse.ArgumentParser(description="Train Actor-Critic agent (PPO)")
     parser.add_argument(
         "--name",
         type=str,
         required=True,
-        help="Model name (e.g. ac_pure). Saves to models/<name>/",
     )
-    parser.add_argument(
-        "--lambda-kl",
-        type=float,
-        default=0.0,
-        help="Max KL regularization weight (0.0 = pure, 0.5 = KL variant)",
-    )
-    parser.add_argument("--episodes", type=int, default=200)
+    parser.add_argument("--episodes", type=int, default=500)
     parser.add_argument("--hands", type=int, default=500)
     parser.add_argument("--checkpoint-every", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=2.5e-4)
-    parser.add_argument(
-        "--ppo",
-        action="store_true",
-        default=True,
-        dest="ppo",
-        help="Use PPO with batched rollouts (default)",
-    )
-    parser.add_argument(
-        "--no-ppo",
-        action="store_false",
-        dest="ppo",
-        help="Use A2C per-hand updates instead of PPO",
-    )
-    parser.add_argument("--rollout-size", type=int, default=128)
-    parser.add_argument("--ppo-epochs", type=int, default=3)
+    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--rollout-size", type=int, default=512)
+    parser.add_argument("--ppo-epochs", type=int, default=4)
     parser.add_argument("--clip-eps", type=float, default=0.2)
-    parser.add_argument("--aux-coef", type=float, default=0.5)
+    parser.add_argument("--aux-coef", type=float, default=0.3)
+    parser.add_argument("--entropy-coef", type=float, default=0.05)
+    parser.add_argument("--extra-critic-steps", type=int, default=5)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -233,16 +207,16 @@ def main() -> None:
 
     train(
         name=args.name,
-        lambda_kl_max=args.lambda_kl,
         num_episodes=args.episodes,
         hands_per_episode=args.hands,
         checkpoint_every=args.checkpoint_every,
         lr=args.lr,
-        ppo=args.ppo,
         rollout_size=args.rollout_size,
         ppo_epochs=args.ppo_epochs,
         clip_eps=args.clip_eps,
         aux_coef=args.aux_coef,
+        entropy_coef=args.entropy_coef,
+        extra_critic_steps=args.extra_critic_steps,
         device=device,
     )
 

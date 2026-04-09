@@ -1,5 +1,3 @@
-"""Shared training utility: play one hand between a BaseAgent and a BasePlayer."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -16,17 +14,17 @@ def play_hand(
     agent: BaseAgent,
     opponent: BasePlayer,
 ) -> float:
-    """Play one hand. Returns the agent's payoff.
-
-    Args:
-        env: The poker environment.
-        agent: Any BaseAgent (trains via act/observe/update).
-        opponent: Any BasePlayer (fixed policy).
-    """
     state = env.reset()
     if hasattr(agent, "reset_hand_state"):
         agent.reset_hand_state()
+
+    both_hands = (
+        tuple(env.env.game.players[0].hand),
+        tuple(env.env.game.players[1].hand),
+    )
+
     action_record: list[tuple[int, str]] = []
+    opp_actions: list[int] = []
     pending_obs: np.ndarray | None = None
     pending_action: int | None = None
 
@@ -49,11 +47,13 @@ def play_hand(
                 state=state,
                 training=True,
                 action_record=action_record,
+                both_hands=both_hands,
             )
             pending_obs = build_features(state).cpu().numpy()
             pending_action = action
         else:
             action = opponent.act(state)
+            opp_actions.append(action)
 
         action_record.append((pid, ACTION_NAMES[action]))
         state = env.step(action)
@@ -71,5 +71,8 @@ def play_hand(
                 done=True,
             )
         )
+
+    if hasattr(agent, "set_opp_actions"):
+        agent.set_opp_actions(opp_actions)
 
     return agent_payoff
