@@ -13,6 +13,13 @@ from players.base_player import BasePlayer
 ACTION_NAMES = {a.value: a.name.lower() for a in Action}
 
 
+def _build_agent_features(agent: BaseAgent, state) -> np.ndarray:
+    builder = getattr(agent, "build_features", None)
+    if callable(builder):
+        return builder(state).cpu().numpy()
+    return build_features(state).cpu().numpy()
+
+
 def play_hand(
     env: PokerEnv,
     agent: BaseAgent,
@@ -42,7 +49,7 @@ def play_hand(
                         obs=pending_obs,
                         action=pending_action,
                         reward=0.0,
-                        next_obs=build_features(state).cpu().numpy(),
+                        next_obs=_build_agent_features(agent, state),
                         done=False,
                     )
                 )
@@ -52,7 +59,7 @@ def play_hand(
                 training=True,
                 action_record=action_record,
             )
-            pending_obs = build_features(state).cpu().numpy()
+            pending_obs = _build_agent_features(agent, state)
             pending_action = action
         else:
             action = opponent.act(state)
@@ -69,7 +76,7 @@ def play_hand(
                 obs=pending_obs,
                 action=pending_action,
                 reward=agent_payoff,
-                next_obs=build_features(state).cpu().numpy(),
+                next_obs=_build_agent_features(agent, state),
                 done=True,
             )
         )

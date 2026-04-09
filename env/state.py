@@ -16,6 +16,7 @@ class State:
         raw_legal_actions: list[str],
         player_id: int,
         hand: tuple[Card, Card],
+        board: tuple[Card],
         **kwargs: dict[str, Any],
     ) -> None:
         self.obs: npt.NDArray[np.float64] = obs
@@ -24,3 +25,4 @@ class State:
         self.raw_legal_actions: list[str] = raw_legal_actions
         self.player_id: int = player_id
         self.hand: tuple[Card, Card] = hand
+        self.board: tuple[Card] = board

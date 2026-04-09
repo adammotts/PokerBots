@@ -19,6 +19,7 @@ class PokerEnv:
             **state,
             player_id=player_id,
             hand=tuple(self.env.game.players[player_id].hand),
+            board=tuple(self.env.game.public_cards),
         )
 
     def step(self, action: int) -> State:
@@ -27,6 +28,7 @@ class PokerEnv:
             **state,
             player_id=player_id,
             hand=tuple(self.env.game.players[player_id].hand),
+            board=tuple(self.env.game.public_cards),
         )
 
     def is_terminal(self) -> bool:

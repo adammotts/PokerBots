@@ -9,9 +9,13 @@ import torch.nn.functional as F
 from torch import nn
 
 from agents.base_agent import BaseAgent, Transition
+from agents.dqn_agent.features import (
+    LEGAL_ACTION_DIM,
+    LEGAL_ACTION_START,
+    build_dqn_features,
+)
 from agents.dqn_agent.networks import QNetwork
 from agents.dqn_agent.replay import EpisodeReplayBuffer, StepExperience
-from agents.features import build_features
 from env.state import State
 
 
@@ -22,7 +26,7 @@ def _detach_hidden(
 
 
 class DoubleDQNAgent(BaseAgent):
-    """Exploitative recurrent Double DQN agent."""
+    """Exploitative recurrent Double DQN agent with a dueling Q-head."""
 
     def __init__(
         self,
@@ -71,6 +75,9 @@ class DoubleDQNAgent(BaseAgent):
         self._game_hidden = None
         self._current_episode = []
 
+    def build_features(self, state: State) -> torch.Tensor:
+        return build_dqn_features(state, self.device)
+
     def act(
         self,
         *,
@@ -82,7 +89,7 @@ class DoubleDQNAgent(BaseAgent):
         if self._game_hidden is None:
             self._game_hidden = self.q_network.init_hidden(self.device)
 
-        features = build_features(state, self.device).unsqueeze(0)
+        features = self.build_features(state).unsqueeze(0)
         with torch.no_grad():
             q_values, hidden_new = self.q_network(features, self._game_hidden)
         self._game_hidden = _detach_hidden(hidden_new)
@@ -92,7 +99,9 @@ class DoubleDQNAgent(BaseAgent):
             return int(random.choice(legal_actions))
 
         masked_q = q_values.squeeze(0).clone()
-        illegal_mask = features[0, 72:76] < 0.5
+        illegal_mask = features[
+            0, LEGAL_ACTION_START : LEGAL_ACTION_START + LEGAL_ACTION_DIM
+        ] < 0.5
         masked_q[illegal_mask] = float("-inf")
         return int(masked_q.argmax().item())
 
@@ -140,7 +149,9 @@ class DoubleDQNAgent(BaseAgent):
                     online_next_q, _ = self.q_network(
                         next_obs, _detach_hidden(online_hidden_after)
                     )
-                    next_legal_mask = next_obs[0, 72:76] > 0.5
+                    next_legal_mask = next_obs[
+                        0, LEGAL_ACTION_START : LEGAL_ACTION_START + LEGAL_ACTION_DIM
+                    ] > 0.5
                     next_online_masked = online_next_q.squeeze(0).clone()
                     next_online_masked[~next_legal_mask] = float("-inf")
                     next_action = int(next_online_masked.argmax().item())
