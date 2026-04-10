@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +10,9 @@ from tqdm import trange
 
 from agents.ac_agent import ActorCriticAgent
 from env.env import PokerEnv
-from players.opponents import make_opponent
+from evaluation.evaluator import Evaluator
+from players.ac_player import ActorCriticPlayer
+from players.opponents import make_opponent, make_random_parameterized
 from train.play_hand import play_hand
 from train.plot_training import plot_training
 
@@ -27,6 +30,22 @@ def pick_opponent(
     return str(np.random.choice(names, p=probs))
 
 
+VAL_OPPONENTS = ["calling_station", "maniac", "old_man_coffee", "polarizing"]
+
+
+def run_validation(
+    agent: ActorCriticAgent, env: PokerEnv, num_hands: int
+) -> dict[str, float]:
+    player = ActorCriticPlayer(agent=agent)
+    results: dict[str, float] = {}
+    for opp_name in VAL_OPPONENTS:
+        opp = make_opponent(opp_name)
+        evaluator = Evaluator(env=env, player0=player, player1=opp)
+        rewards = evaluator.run_matchup(num_episodes=num_hands)
+        results[opp_name] = float(rewards.mean())
+    return results
+
+
 def train(
     *,
     name: str,
@@ -40,6 +59,8 @@ def train(
     aux_coef: float,
     entropy_coef: float,
     extra_critic_steps: int,
+    val_every: int,
+    use_hardcoded: bool,
     device: str,
 ) -> None:
     save_dir = MODELS_DIR / name
@@ -75,6 +96,17 @@ def train(
             all_late_rewards = [float("nan")] * len(all_episode_rewards)
         print(f"Loaded {len(all_episode_rewards)} prior episodes from log")
 
+    val_episodes: list[int] = []
+    val_results: dict[str, list[float]] = {f"val_{o}": [] for o in VAL_OPPONENTS}
+    if log_path.exists():
+        old = np.load(log_path, allow_pickle=True)
+        if "val_episodes" in old:
+            val_episodes = old["val_episodes"].tolist()
+            for opp in VAL_OPPONENTS:
+                key = f"val_{opp}"
+                if key in old:
+                    val_results[key] = old[key].tolist()
+
     n_prior = len(all_episode_rewards)
     ckpt_path = save_dir / f"ep{n_prior}.pt"
     if ckpt_path.exists():
@@ -85,20 +117,27 @@ def train(
         agent.load(str(final_path))
 
     env = PokerEnv()
-    opponent_names = ["calling_station", "maniac", "old_man_coffee", "polarizing"]
+    hardcoded_names = ["calling_station", "maniac", "old_man_coffee", "polarizing"]
 
     def save_log() -> None:
-        np.savez(
-            log_path,
-            episode_rewards=np.array(all_episode_rewards),
-            early_rewards=np.array(all_early_rewards),
-            late_rewards=np.array(all_late_rewards),
-            opponent_names=np.array(all_opponent_names),
-        )
+        save_dict = {
+            "episode_rewards": np.array(all_episode_rewards),
+            "early_rewards": np.array(all_early_rewards),
+            "late_rewards": np.array(all_late_rewards),
+            "opponent_names": np.array(all_opponent_names),
+            "val_episodes": np.array(val_episodes),
+        }
+        for key, vals in val_results.items():
+            save_dict[key] = np.array(vals)
+        np.savez(log_path, **save_dict)
 
     def save_plot() -> None:
         early = np.array(all_early_rewards) if all_early_rewards else None
         late = np.array(all_late_rewards) if all_late_rewards else None
+        vd = None
+        if val_episodes:
+            vd = {"episodes": val_episodes}
+            vd.update(val_results)
         plot_training(
             np.array(all_episode_rewards),
             np.array(all_opponent_names),
@@ -106,11 +145,13 @@ def train(
             plot_path,
             early,
             late,
+            vd,
         )
 
+    mode = "hardcoded" if use_hardcoded else "parameterized"
     print(
-        f"PPO training: rollout={rollout_size}, epochs={ppo_epochs}, "
-        f"clip={clip_eps}, lr={lr}, entropy={entropy_coef}, "
+        f"PPO training ({mode} opponents): rollout={rollout_size}, "
+        f"epochs={ppo_epochs}, clip={clip_eps}, lr={lr}, entropy={entropy_coef}, "
         f"aux={aux_coef}, extra_critic={extra_critic_steps}"
     )
 
@@ -123,12 +164,16 @@ def train(
     print(f"Episodes {start_episode + 1} to {num_episodes} ({remaining} remaining)")
 
     for episode in range(start_episode, num_episodes):
-        opp_name = pick_opponent(opponent_names, opp_counts)
-        opp_counts[opp_name] = opp_counts.get(opp_name, 0) + 1
-        opponent = make_opponent(opp_name)
-        agent.reset_opponent_state()
+        if use_hardcoded:
+            opp_name = pick_opponent(hardcoded_names, opp_counts)
+            opponent = make_opponent(opp_name)
+        elif random.random() < 0.5:
+            opp_name = random.choice(hardcoded_names)
+            opponent = make_opponent(opp_name)
+        else:
+            opponent, opp_name = make_random_parameterized()
 
-        current_lr = lr
+        agent.reset_opponent_state()
 
         episode_rewards: list[float] = []
 
@@ -167,8 +212,17 @@ def train(
             f"Episode {episode + 1:3d} | vs {opp_name:<16s} | "
             f"avg payoff: {avg_reward:+.4f} | "
             f"running avg: {np.mean(all_episode_rewards):+.4f} | "
-            f"lr: {current_lr:.2e}"
+            f"lr: {lr:.2e}"
         )
+
+        if val_every > 0 and (episode + 1) % val_every == 0:
+            with torch.no_grad():
+                vr = run_validation(agent, env, hands_per_episode)
+            val_episodes.append(episode + 1)
+            for opp, payoff in vr.items():
+                val_results[f"val_{opp}"].append(payoff)
+            val_str = " | ".join(f"{o}: {p:+.3f}" for o, p in vr.items())
+            print(f"  [val] {val_str}")
 
         if (episode + 1) % checkpoint_every == 0:
             ckpt_path = save_dir / f"ep{episode + 1}.pt"
@@ -185,11 +239,7 @@ def train(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train Actor-Critic agent (PPO)")
-    parser.add_argument(
-        "--name",
-        type=str,
-        required=True,
-    )
+    parser.add_argument("--name", type=str, required=True)
     parser.add_argument("--episodes", type=int, default=500)
     parser.add_argument("--hands", type=int, default=500)
     parser.add_argument("--checkpoint-every", type=int, default=10)
@@ -200,6 +250,18 @@ def main() -> None:
     parser.add_argument("--aux-coef", type=float, default=0.3)
     parser.add_argument("--entropy-coef", type=float, default=0.05)
     parser.add_argument("--extra-critic-steps", type=int, default=5)
+    parser.add_argument(
+        "--use-hardcoded",
+        action="store_true",
+        default=False,
+        help="Use original 4 hardcoded opponents instead of parameterized",
+    )
+    parser.add_argument(
+        "--val-every",
+        type=int,
+        default=5,
+        help="Run validation vs hardcoded opponents every N episodes (0 to disable)",
+    )
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -217,6 +279,8 @@ def main() -> None:
         aux_coef=args.aux_coef,
         entropy_coef=args.entropy_coef,
         extra_critic_steps=args.extra_critic_steps,
+        use_hardcoded=args.use_hardcoded,
+        val_every=args.val_every,
         device=device,
     )
 

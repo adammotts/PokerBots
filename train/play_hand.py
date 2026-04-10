@@ -17,6 +17,7 @@ def play_hand(
     state = env.reset()
     if hasattr(agent, "reset_hand_state"):
         agent.reset_hand_state()
+    opponent.reset_hand()
 
     both_hands = (
         tuple(env.env.game.players[0].hand),
@@ -55,7 +56,10 @@ def play_hand(
             action = opponent.act(state)
             opp_actions.append(action)
 
-        action_record.append((pid, ACTION_NAMES[action]))
+        action_name = ACTION_NAMES[action]
+        action_record.append((pid, action_name))
+        if hasattr(opponent, "record_action"):
+            opponent.record_action(pid, action_name)
         state = env.step(action)
 
     payoffs = env.get_payoffs()

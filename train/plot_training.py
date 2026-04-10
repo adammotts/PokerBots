@@ -16,6 +16,10 @@ OPPONENT_COLORS = {
     "maniac": "#d62728",
     "old_man_coffee": "#2ca02c",
     "polarizing": "#ff7f0e",
+    "tight-passive": "#9467bd",
+    "tight-aggro": "#8c564b",
+    "loose-passive": "#e377c2",
+    "loose-aggro": "#17becf",
 }
 
 SIGMA_OVERALL = 5
@@ -30,6 +34,7 @@ def plot_training(
     output_path: Path,
     early_rewards: np.ndarray | None = None,
     late_rewards: np.ndarray | None = None,
+    val_data: dict[str, object] | None = None,
 ) -> None:
     unique_opps = sorted(set(opponents))
     opp_counts = {opp: int(np.sum(opponents == opp)) for opp in unique_opps}
@@ -42,7 +47,8 @@ def plot_training(
         and np.any(np.isfinite(early_rewards))
     )
 
-    nrows = 3 if has_early_late else 2
+    has_val = val_data is not None and len(val_data.get("episodes", [])) > 0
+    nrows = 2 + int(has_early_late) + int(has_val)
     fig, axes = plt.subplots(nrows, 1, figsize=(14, 5 * nrows))
 
     ax1 = axes[0]
@@ -121,6 +127,30 @@ def plot_training(
         )
         ax3.legend()
 
+    if has_val:
+        ax_val = axes[nrows - 1]
+        val_eps = np.array(val_data["episodes"])
+        for opp_name in ["calling_station", "maniac", "old_man_coffee", "polarizing"]:
+            key = f"val_{opp_name}"
+            if key in val_data and len(val_data[key]) > 0:
+                vals = np.array(val_data[key], dtype=float)
+                color = OPPONENT_COLORS.get(opp_name, "gray")
+                ax_val.scatter(val_eps[: len(vals)], vals, color=color, alpha=0.3, s=10)
+                if len(vals) >= 3:
+                    sm = gaussian_filter1d(vals, sigma=SIGMA_OPP)
+                    ax_val.plot(
+                        val_eps[: len(vals)],
+                        sm,
+                        color=color,
+                        linewidth=1.5,
+                        label=opp_name,
+                    )
+        ax_val.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+        ax_val.set_xlabel("Episode")
+        ax_val.set_ylabel("Avg Payoff per Hand")
+        ax_val.set_title(f"{model_name} — Validation vs Hardcoded Opponents")
+        ax_val.legend(loc="lower right")
+
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(str(output_path), dpi=150)
@@ -139,10 +169,18 @@ def plot_from_log(model_name: str, output_path: Path | None = None) -> None:
     early = data["early_rewards"] if "early_rewards" in data else None
     late = data["late_rewards"] if "late_rewards" in data else None
 
+    val_data = None
+    if "val_episodes" in data:
+        val_data = {"episodes": data["val_episodes"]}
+        for opp in ["calling_station", "maniac", "old_man_coffee", "polarizing"]:
+            key = f"val_{opp}"
+            if key in data:
+                val_data[key] = data[key]
+
     if output_path is None:
         output_path = MODELS_DIR / model_name / "training_curves.png"
 
-    plot_training(rewards, opponents, model_name, output_path, early, late)
+    plot_training(rewards, opponents, model_name, output_path, early, late, val_data)
     print(f"Plot saved to {output_path}")
 
 
