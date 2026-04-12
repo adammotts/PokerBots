@@ -3,13 +3,6 @@ import torch.nn as nn
 
 
 class OpponentLSTM(nn.Module):
-    """Cross-hand opponent model.
-
-    Processes a summary of each completed hand as a time series.
-    Hidden state persists across hands within a session and encodes
-    an implicit model of the opponent's tendencies.
-    """
-
     def __init__(self, input_size: int = 8, hidden_size: int = 32) -> None:
         super().__init__()
         self.hidden_size = hidden_size
@@ -20,8 +13,6 @@ class OpponentLSTM(nn.Module):
         hand_summary: torch.Tensor,
         hidden: tuple[torch.Tensor, torch.Tensor],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        # hand_summary: (1, 1, 8)
-        # hidden: (h, c) each (1, 1, 32)
         output, hidden_new = self.lstm(hand_summary, hidden)
         return output, hidden_new
 
@@ -33,113 +24,82 @@ class OpponentLSTM(nn.Module):
 
 
 class ActorNetwork(nn.Module):
-    """Policy network: state features + opponent context -> action logits.
-
-    Contains a game LSTM that captures within-hand action sequences.
-    This LSTM should be reset at the start of each hand.
-    """
-
     def __init__(
         self,
         state_dim: int = 77,
-        hidden_dim: int = 64,
+        hidden_dim: int = 128,
         opp_dim: int = 32,
         num_actions: int = 4,
     ) -> None:
         super().__init__()
-        self.hidden_dim = hidden_dim
-        self.fc1 = nn.Linear(state_dim, 128)
-        self.fc2 = nn.Linear(128, hidden_dim)
-        self.game_lstm = nn.LSTM(hidden_dim, hidden_dim, num_layers=1, batch_first=True)
-        self.head1 = nn.Linear(hidden_dim + opp_dim, 32)
-        self.head2 = nn.Linear(32, num_actions)
+        self.trunk = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+        )
+        self.film_scale = nn.Linear(opp_dim, hidden_dim)
+        self.film_shift = nn.Linear(opp_dim, hidden_dim)
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, num_actions),
+        )
 
     def forward(
         self,
         features: torch.Tensor,
-        game_hidden: tuple[torch.Tensor, torch.Tensor],
         opp_context: torch.Tensor,
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        # features: (1, 77)
-        # game_hidden: (h, c) each (1, 1, hidden_dim)
-        # opp_context: (1, 32)
-        x = torch.relu(self.fc1(features))
-        x = torch.relu(self.fc2(x))
-        x = x.unsqueeze(1)  # (1, 1, hidden_dim)
-        x, game_hidden_new = self.game_lstm(x, game_hidden)
-        x = x.squeeze(1)  # (1, hidden_dim)
-        combined = torch.cat([x, opp_context], dim=-1)
-        x = torch.relu(self.head1(combined))
-        logits = self.head2(x)
-        return logits, game_hidden_new
-
-    def init_game_hidden(
-        self, device: str = "cpu"
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return (
-            torch.zeros(1, 1, self.hidden_dim, device=device),
-            torch.zeros(1, 1, self.hidden_dim, device=device),
-        )
+    ) -> torch.Tensor:
+        x = self.trunk(features)
+        gamma = self.film_scale(opp_context)
+        beta = self.film_shift(opp_context)
+        x = gamma * x + beta
+        return self.head(x)
 
 
-class CriticNetwork(nn.Module):
-    """Value network: state features + opponent context -> V(s).
-
-    Same structure as ActorNetwork but outputs a scalar state value.
-    """
-
+class CentralizedCritic(nn.Module):
     def __init__(
         self,
         state_dim: int = 77,
-        hidden_dim: int = 64,
+        card_dim: int = 104,
+        hidden_dim: int = 128,
         opp_dim: int = 32,
     ) -> None:
         super().__init__()
-        self.hidden_dim = hidden_dim
-        self.fc1 = nn.Linear(state_dim, 128)
-        self.fc2 = nn.Linear(128, hidden_dim)
-        self.game_lstm = nn.LSTM(hidden_dim, hidden_dim, num_layers=1, batch_first=True)
-        self.head1 = nn.Linear(hidden_dim + opp_dim, 32)
-        self.head2 = nn.Linear(32, 1)
+        self.trunk = nn.Sequential(
+            nn.Linear(state_dim + card_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+        )
+        self.film_scale = nn.Linear(opp_dim, hidden_dim)
+        self.film_shift = nn.Linear(opp_dim, hidden_dim)
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+        )
 
     def forward(
         self,
         features: torch.Tensor,
-        game_hidden: tuple[torch.Tensor, torch.Tensor],
+        both_hands: torch.Tensor,
         opp_context: torch.Tensor,
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        x = torch.relu(self.fc1(features))
-        x = torch.relu(self.fc2(x))
-        x = x.unsqueeze(1)
-        x, game_hidden_new = self.game_lstm(x, game_hidden)
-        x = x.squeeze(1)
-        combined = torch.cat([x, opp_context], dim=-1)
-        x = torch.relu(self.head1(combined))
-        value = self.head2(x)
-        return value, game_hidden_new
-
-    def init_game_hidden(
-        self, device: str = "cpu"
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return (
-            torch.zeros(1, 1, self.hidden_dim, device=device),
-            torch.zeros(1, 1, self.hidden_dim, device=device),
-        )
+    ) -> torch.Tensor:
+        x = self.trunk(torch.cat([features, both_hands], dim=-1))
+        gamma = self.film_scale(opp_context)
+        beta = self.film_shift(opp_context)
+        x = gamma * x + beta
+        return self.head(x)
 
 
-class ConfidenceGate(nn.Module):
-    """Learned confidence signal from the opponent LSTM hidden state.
-
-    Outputs a scalar in [0, 1] indicating how confident the opponent
-    model is. Used to gate KL regularization: high confidence -> low
-    KL penalty -> more exploitation.
-    """
-
-    def __init__(self, opp_hidden_size: int = 32) -> None:
+class OpponentPredictor(nn.Module):
+    def __init__(self, opp_hidden_size: int = 32, num_actions: int = 4) -> None:
         super().__init__()
-        self.linear = nn.Linear(opp_hidden_size, 1)
+        self.fc1 = nn.Linear(opp_hidden_size, 32)
+        self.fc2 = nn.Linear(32, num_actions)
 
     def forward(self, opp_hidden_h: torch.Tensor) -> torch.Tensor:
-        # opp_hidden_h: (1, 1, 32) -> squeeze to (1, 32)
-        h = opp_hidden_h.squeeze(0)
-        return torch.sigmoid(self.linear(h))
+        x = torch.relu(self.fc1(opp_hidden_h))
+        return self.fc2(x)

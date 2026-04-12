@@ -1,16 +1,12 @@
-"""Shared training utility: play one hand between a BaseAgent and a BasePlayer."""
-
 from __future__ import annotations
 
 import numpy as np
 
 from agents.base_agent import BaseAgent, Transition
 from agents.features import build_features
-from env.action import Action
+from env.action import ACTION_NAMES
 from env.env import PokerEnv
 from players.base_player import BasePlayer
-
-ACTION_NAMES = {a.value: a.name.lower() for a in Action}
 
 
 def _build_agent_features(agent: BaseAgent, state) -> np.ndarray:
@@ -25,17 +21,18 @@ def play_hand(
     agent: BaseAgent,
     opponent: BasePlayer,
 ) -> float:
-    """Play one hand. Returns the agent's payoff.
-
-    Args:
-        env: The poker environment.
-        agent: Any BaseAgent (trains via act/observe/update).
-        opponent: Any BasePlayer (fixed policy).
-    """
     state = env.reset()
     if hasattr(agent, "reset_hand_state"):
         agent.reset_hand_state()
+    opponent.reset_hand()
+
+    both_hands = (
+        tuple(env.env.game.players[0].hand),
+        tuple(env.env.game.players[1].hand),
+    )
+
     action_record: list[tuple[int, str]] = []
+    opp_actions: list[int] = []
     pending_obs: np.ndarray | None = None
     pending_action: int | None = None
 
@@ -58,13 +55,18 @@ def play_hand(
                 state=state,
                 training=True,
                 action_record=action_record,
+                both_hands=both_hands,
             )
             pending_obs = _build_agent_features(agent, state)
             pending_action = action
         else:
             action = opponent.act(state)
+            opp_actions.append(action)
 
-        action_record.append((pid, ACTION_NAMES[action]))
+        action_name = ACTION_NAMES[action]
+        action_record.append((pid, action_name))
+        if hasattr(opponent, "record_action"):
+            opponent.record_action(pid, action_name)
         state = env.step(action)
 
     payoffs = env.get_payoffs()
@@ -80,5 +82,8 @@ def play_hand(
                 done=True,
             )
         )
+
+    if hasattr(agent, "set_opp_actions"):
+        agent.set_opp_actions(opp_actions)
 
     return agent_payoff
