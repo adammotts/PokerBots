@@ -379,6 +379,142 @@ class ActorCriticAgent(BaseAgent):
         self._collecting = False
         return diagnostics
 
+    def get_trial(self) -> list[HandRollout]:
+        trial = list(self._rollout)
+        self._rollout = []
+        self._collecting = False
+        return trial
+
+    def meta_ppo_update(self, trials: list[list[HandRollout]]) -> dict[str, float]:
+        total_steps = sum(len(s.steps) for trial in trials for s in trial)
+        if total_steps == 0:
+            return {}
+
+        log_probs_old_t = torch.tensor(
+            [s.log_prob_old for trial in trials for hand in trial for s in hand.steps],
+            dtype=torch.float32,
+            device=self.device,
+        )
+
+        actor_params = (
+            list(self.actor.parameters())
+            + list(self.opponent_lstm.parameters())
+            + list(self.opp_predictor.parameters())
+        )
+
+        diagnostics: dict[str, float] = {}
+
+        for epoch in range(self.ppo_epochs):
+            all_log_probs_new: list[torch.Tensor] = []
+            all_entropies: list[torch.Tensor] = []
+            all_advantages: list[torch.Tensor] = []
+            all_returns: list[torch.Tensor] = []
+            all_values: list[torch.Tensor] = []
+            aux_losses: list[torch.Tensor] = []
+
+            for trial in trials:
+                opp_hidden = self.opponent_lstm.init_hidden(self.device)
+
+                for hand in trial:
+                    if not hand.steps:
+                        summary_input = hand.hand_summary.unsqueeze(0).unsqueeze(0)
+                        _, opp_hidden = self.opponent_lstm(summary_input, opp_hidden)
+                        continue
+
+                    opp_context = opp_hidden[0].squeeze(0)
+                    step_features = torch.stack([s.features for s in hand.steps])
+                    step_both_hands = torch.stack(
+                        [s.both_hands_onehot for s in hand.steps]
+                    )
+                    step_masks = torch.stack([s.legal_mask for s in hand.steps])
+                    n_steps = len(hand.steps)
+                    opp_ctx_expanded = opp_context.expand(n_steps, -1)
+
+                    logits = self.actor(step_features, opp_ctx_expanded)
+                    values = self.critic(
+                        step_features, step_both_hands, opp_ctx_expanded
+                    ).squeeze(-1)
+
+                    masked_logits = logits + step_masks
+                    dist = Categorical(logits=masked_logits)
+                    actions_t = torch.tensor(
+                        [s.action for s in hand.steps], device=self.device
+                    )
+                    all_log_probs_new.append(dist.log_prob(actions_t))
+                    all_entropies.append(dist.entropy())
+
+                    rewards = [0.0] * n_steps
+                    rewards[-1] = hand.reward
+                    advantages, returns = _compute_gae(
+                        rewards, values.detach(), self.gamma, self.gae_lambda
+                    )
+                    all_advantages.append(advantages)
+                    all_returns.append(returns)
+                    all_values.append(values)
+
+                    if hand.opp_actions:
+                        pred_logits = self.opp_predictor(opp_context)
+                        targets = torch.tensor(
+                            hand.opp_actions,
+                            dtype=torch.long,
+                            device=self.device,
+                        )
+                        expanded = pred_logits.expand(len(hand.opp_actions), -1)
+                        aux_losses.append(F.cross_entropy(expanded, targets))
+
+                    summary_input = hand.hand_summary.unsqueeze(0).unsqueeze(0)
+                    _, opp_hidden = self.opponent_lstm(summary_input, opp_hidden)
+
+            if not all_log_probs_new:
+                continue
+
+            log_probs_new_t = torch.cat(all_log_probs_new)
+            entropies_t = torch.cat(all_entropies)
+            advantages_t = torch.cat(all_advantages)
+            returns_t = torch.cat(all_returns)
+            values_t = torch.cat(all_values)
+
+            if advantages_t.numel() > 1:
+                advantages_t = (advantages_t - advantages_t.mean()) / (
+                    advantages_t.std() + 1e-8
+                )
+
+            ratio = torch.exp(log_probs_new_t - log_probs_old_t)
+            surr1 = ratio * advantages_t
+            surr2 = (
+                torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * advantages_t
+            )
+            policy_loss = -torch.min(surr1, surr2).mean()
+            value_loss = F.mse_loss(values_t, returns_t)
+            entropy_loss = -entropies_t.mean()
+
+            actor_loss = policy_loss + self.entropy_coef * entropy_loss
+            if aux_losses:
+                aux_loss = torch.stack(aux_losses).mean()
+                actor_loss = actor_loss + self.aux_coef * aux_loss
+            else:
+                aux_loss = torch.tensor(0.0)
+
+            total_loss = actor_loss + self.value_coef * value_loss
+
+            self.actor_optimizer.zero_grad()
+            self.critic_optimizer.zero_grad()
+            total_loss.backward()
+            nn.utils.clip_grad_norm_(actor_params, self.grad_clip)
+            nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
+            self.actor_optimizer.step()
+            self.critic_optimizer.step()
+
+            if epoch == 0:
+                diagnostics = {
+                    "policy_loss": policy_loss.item(),
+                    "value_loss": value_loss.item(),
+                    "entropy": entropies_t.mean().item(),
+                    "aux_loss": aux_loss.item(),
+                }
+
+        return diagnostics
+
     def step_opponent_after_hand(
         self,
         action_record: list[tuple[int, str]],
