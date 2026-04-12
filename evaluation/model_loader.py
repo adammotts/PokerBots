@@ -29,14 +29,20 @@ def parse_agent_spec(spec: str) -> AgentSpec:
 
 
 def load_player(spec: AgentSpec, models_dir: Path) -> BasePlayer:
+    dir_name = spec.model_name.replace("-", "_")
+
     if spec.agent_type == "ac":
         agent = ActorCriticAgent()
-        agent.load(str(models_dir / spec.model_name / "final.pt"))
+        ckpt = models_dir / dir_name / "final.pt"
+        print(f"Loading AC agent from {ckpt}")
+        agent.load(str(ckpt))
         return ActorCriticPlayer(agent=agent)
 
     if spec.agent_type == "dqn":
         agent = DoubleDQNAgent()
-        agent.load(str(models_dir / spec.model_name / "final.pt"))
+        ckpt = models_dir / dir_name / "final.pt"
+        print(f"Loading DQN agent from {ckpt}")
+        agent.load(str(ckpt))
         return DoubleDQNPlayer(agent=agent)
 
     raise ValueError(f"Unsupported agent type: {spec.agent_type}")
