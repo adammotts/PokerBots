@@ -556,7 +556,7 @@ class ActorCriticAgent(BaseAgent):
 
     def load(self, path: str) -> None:
         if not os.path.exists(path):
-            return
+            raise FileNotFoundError(f"Checkpoint not found: {path}")
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         self.actor.load_state_dict(checkpoint["actor"])
         self.critic.load_state_dict(checkpoint["critic"])

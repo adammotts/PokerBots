@@ -20,6 +20,7 @@ OPPONENT_COLORS = {
     "tight-aggro": "#8c564b",
     "loose-passive": "#e377c2",
     "loose-aggro": "#17becf",
+    "meta_mix": "#7f7f7f",
 }
 
 SIGMA_OVERALL = 5

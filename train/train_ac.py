@@ -393,8 +393,7 @@ def meta_train(
         all_episode_rewards.append(avg_reward)
         all_early_rewards.append(float(np.mean(iter_early)))
         all_late_rewards.append(float(np.mean(iter_late)))
-        opp_str = ",".join(sorted(set(trial_opp_names)))
-        all_opponent_names.append(opp_str)
+        all_opponent_names.append("meta_mix")
 
         diag_str = ""
         if diag:
