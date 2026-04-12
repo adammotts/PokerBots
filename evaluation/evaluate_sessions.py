@@ -146,7 +146,7 @@ def main() -> None:
 
         results[agent_name] = payoffs_2d
 
-    output_path = RESULTS_DIR / f"sessions_vs_{args.opponent}.png"
+    output_path = RESULTS_DIR / f"sessions_{sanitize_label(agent_name)}_vs_{args.opponent}.png"
     plot_sessions(results, args.opponent, output_path)
 
 
