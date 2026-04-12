@@ -8,6 +8,7 @@ from agents.dqn_agent import DoubleDQNAgent
 from players.ac_player import ActorCriticPlayer
 from players.base_player import BasePlayer
 from players.dqn_player import DoubleDQNPlayer
+from players.random_player import RandomPlayer
 
 
 @dataclass(frozen=True)
@@ -17,12 +18,27 @@ class AgentSpec:
     label: str
 
 
+def infer_agent_type(spec: str) -> str:
+    normalized = spec.replace("_", "-").lower()
+
+    if normalized == "random":
+        return "random"
+
+    if normalized.startswith("dqn-"):
+        return "dqn"
+
+    if normalized.startswith("ac-"):
+        return "ac"
+
+    return "ac"
+
+
 def parse_agent_spec(spec: str) -> AgentSpec:
     if ":" in spec:
         agent_type, model_name = spec.split(":", maxsplit=1)
         label = spec
     else:
-        agent_type = "ac"
+        agent_type = infer_agent_type(spec)
         model_name = spec
         label = spec
     return AgentSpec(agent_type=agent_type, model_name=model_name, label=label)
@@ -30,6 +46,9 @@ def parse_agent_spec(spec: str) -> AgentSpec:
 
 def load_player(spec: AgentSpec, models_dir: Path) -> BasePlayer:
     dir_name = spec.model_name.replace("-", "_")
+
+    if spec.agent_type == "random":
+        return RandomPlayer()
 
     if spec.agent_type == "ac":
         agent = ActorCriticAgent()
