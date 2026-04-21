@@ -6,10 +6,11 @@ from agents.base_agent import BaseAgent, Transition
 from agents.features import build_features
 from env.action import ACTION_NAMES
 from env.env import PokerEnv
+from env.state import State
 from players.base_player import BasePlayer
 
 
-def _build_agent_features(agent: BaseAgent, state) -> np.ndarray:
+def _build_agent_features(agent: BaseAgent, state: State) -> np.ndarray:
     builder = getattr(agent, "build_features", None)
     if callable(builder):
         return builder(state).cpu().numpy()

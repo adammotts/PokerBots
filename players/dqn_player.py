@@ -6,8 +6,6 @@ from players.base_player import BasePlayer
 
 
 class DoubleDQNPlayer(BasePlayer):
-    """Wraps DoubleDQNAgent behind the BasePlayer interface for evaluation."""
-
     def __init__(self, *, agent: DoubleDQNAgent) -> None:
         super().__init__(player_name="DoubleDQN")
         self.agent = agent

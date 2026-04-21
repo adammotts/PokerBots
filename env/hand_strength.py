@@ -53,13 +53,9 @@ def straight_window_info(cards: list[Card]) -> tuple[int, int, bool, bool]:
     has_straight = False
     has_straight_draw = False
 
-    # top = 5 means A-2-3-4-5
-    # top = 6 means 2-3-4-5-6
-    # ...
-    # top = 14 means T-J-Q-K-A
     for top in range(5, 14 + 1):
         if top == 5:
-            window = {14, 2, 3, 4, 5}  # wheel
+            window = {14, 2, 3, 4, 5}
         else:
             window = set(range(top - 4, top + 1))
 

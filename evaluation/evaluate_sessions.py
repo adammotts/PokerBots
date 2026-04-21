@@ -1,4 +1,5 @@
-"""Multi-session evaluation: run an agent against one opponent for many
+"""
+Multi-session evaluation: run an agent against one opponent for many
 independent sessions, plot cumulative mbb/h over hands with 95% CI bands.
 
 Shows how the agent adapts within a session as the opponent LSTM builds up.

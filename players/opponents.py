@@ -28,18 +28,6 @@ def make_opponent(name: str) -> BasePlayer:
     return OPPONENT_CLASSES[name]()
 
 
-def _categorize(vpip: float, aggression: float) -> str:
-    tight = vpip < 0.4
-    passive = aggression < 1.5
-    if tight and passive:
-        return "tight-passive"
-    if tight:
-        return "tight-aggro"
-    if passive:
-        return "loose-passive"
-    return "loose-aggro"
-
-
 _CATEGORY_RANGES = {
     "tight-passive": {"vpip": (0.15, 0.40), "aggression": (0.3, 1.5)},
     "tight-aggro": {"vpip": (0.15, 0.40), "aggression": (1.5, 4.0)},
