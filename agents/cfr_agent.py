@@ -8,7 +8,6 @@ from open_spiel.python.algorithms import external_sampling_mccfr as es_mccfr
 from agents.base_agent import BaseAgent, Transition
 from env.state import State
 
-# Limit holdem game config for OpenSpiel
 _GAME_PARAMS = {
     "betting": "limit",
     "numPlayers": 2,
@@ -23,7 +22,6 @@ _GAME_PARAMS = {
     "numBoardCards": "0 3 1 1",
 }
 
-# OpenSpiel card encoding: action = rank_index * 4 + suit_index
 _RANK_TO_IDX = {
     "2": 0,
     "3": 1,
@@ -41,12 +39,9 @@ _RANK_TO_IDX = {
 }
 _SUIT_TO_IDX = {"C": 0, "D": 1, "H": 2, "S": 3}
 
-# OpenSpiel action IDs: 0=fold, 1=call/check, 2=raise/bet
 _RLCARD_ACTION_TO_OS = {"fold": 0, "call": 1, "check": 1, "raise": 2}
 
-# RLCard action IDs: 0=call, 1=raise, 2=fold, 3=check
-# Map OpenSpiel action → RLCard action(s)
-_OS_TO_RLCARD = {0: [2], 1: [0, 3], 2: [1]}  # OS call/check maps to both
+_OS_TO_RLCARD = {0: [2], 1: [0, 3], 2: [1]}
 
 
 def _rlcard_card_to_os_action(card: str) -> int:
@@ -91,7 +86,6 @@ class CFRAgent(BaseAgent):
         except (IndexError, KeyError, pyspiel.SpielError):
             return int(np.random.choice(state.legal_actions))
 
-        # Map OpenSpiel action probs → RLCard 4-action space
         legal_set = set(state.legal_actions.keys())
         prob_array = np.zeros(4)
         for os_action, prob in probs.items():
@@ -99,7 +93,6 @@ class CFRAgent(BaseAgent):
                 if rl_action in legal_set:
                     prob_array[rl_action] += prob
 
-        # Zero out illegal actions and renormalize
         mask = np.zeros(4)
         for a in state.legal_actions:
             mask[a] = 1.0
@@ -119,7 +112,7 @@ class CFRAgent(BaseAgent):
         for _ in range(self.iterations):
             self._solver.iteration()
             self.total_iterations += 1
-        self._avg_policy = None  # invalidate cached policy
+        self._avg_policy = None
 
     def save(self, path: str) -> None:
         os.makedirs(path, exist_ok=True)
@@ -127,15 +120,12 @@ class CFRAgent(BaseAgent):
         tmp = final + ".tmp"
         with open(tmp, "wb") as f:
             p = pickle.Pickler(f, protocol=pickle.HIGHEST_PROTOCOL)
-            # fast=True disables pickle's memo dict (cycle detection/deduplication).
-            # For millions of infostates the memo alone can consume several GB of RAM,
-            # causing OOM on save. Infostates have no shared references so this is safe.
             p.fast = True
             p.dump(self.total_iterations)
             for key, val in self._solver._infostates.items():
                 p.dump((key, val))
-            p.dump(None)  # sentinel marks end of stream
-        os.replace(tmp, final)  # atomic on Linux (rename syscall)
+            p.dump(None)
+        os.replace(tmp, final)
 
     def load(self, path: str) -> None:
         pkl = os.path.join(path, "cfr.pkl")
@@ -179,10 +169,8 @@ class CFRAgent(BaseAgent):
         public_cards = [_rlcard_card_to_os_action(c) for c in raw_obs["public_cards"]]
         used = set(our_cards + public_cards)
 
-        # Pick 2 dummy cards for the opponent (any unused cards)
         dummy_opp = [i for i in range(52) if i not in used][:2]
 
-        # Deal order: P0-c1, P0-c2, P1-c1, P1-c2
         if player_id == 0:
             deal_order = our_cards + dummy_opp
         else:
@@ -191,7 +179,6 @@ class CFRAgent(BaseAgent):
         for card_action in deal_order:
             state.apply_action(card_action)
 
-        # Replay action history, dealing community cards between rounds
         public_idx = 0
         action_idx = 0
         while not state.is_terminal():
@@ -202,7 +189,6 @@ class CFRAgent(BaseAgent):
                 else:
                     break
             elif state.current_player() < 0:
-                # Terminal or chance — stop
                 break
             elif action_idx < len(action_record):
                 _, action_str = action_record[action_idx]

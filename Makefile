@@ -1,4 +1,3 @@
-# Shell configuration for git bash compatibility
 ifeq ($(OS),Windows_NT)
     SHELL := C:/Program Files/Git/bin/bash.exe
     ifeq ($(wildcard $(SHELL)),)
@@ -18,23 +17,21 @@ endif
 
 .PHONY: help check-deps sync lint format train-cfr train-ac-pure train-ac-kl train-dqn-calling train-dqn-maniac train-dqn-omc train-dqn-polar matchup evaluate-sessions pack-models unpack-models clean-models
 
-# Colors for output
 GREEN := \033[0;32m
 RED := \033[0;31m
 YELLOW := \033[0;33m
 BLUE := \033[0;34m
 CYAN := \033[0;36m
-NC := \033[0m # No Color
+NC := \033[0m
 CHECKMARK := [OK]
 CROSSMARK := [NO]
 
-# Project settings
 PROJECT_NAME := pokerbots
 MODELS_ARCHIVE := models.tar.gz
 UV_CACHE_DIR ?= .uv-cache
 UV_RUN = UV_CACHE_DIR=$(UV_CACHE_DIR) uv run
 
-help: ## Show this help message
+help:
 	@printf "$(CYAN)====================================================\n$(NC)"
 	@printf "$(CYAN)  PokerBots - Development Commands\n$(NC)"
 	@printf "$(CYAN)====================================================\n\n$(NC)"
@@ -44,7 +41,7 @@ help: ## Show this help message
 		}' $(MAKEFILE_LIST)
 	@printf "\n"
 
-check-deps: ## Check if all required dependencies are installed
+check-deps:
 	@printf "$(BLUE)Checking dependencies...\n$(NC)\n"
 	@command -v python >/dev/null 2>&1 && \
 		python -c "import sys; exit(0 if sys.version_info[:2]==(3,11) else 1)" 2>/dev/null && \
@@ -58,13 +55,13 @@ check-deps: ## Check if all required dependencies are installed
 		printf "  $(RED)$(CROSSMARK)$(NC) tar:         Not found\n"
 	@printf "\n"
 
-sync: ## Install/sync all dependencies with uv
+sync:
 	@printf "$(BLUE)Syncing dependencies...\n$(NC)"
 	@UV_CACHE_DIR=$(UV_CACHE_DIR) uv sync
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Dependencies synced\n"
 	@printf "\n"
 
-lint: ## Check code linting with Ruff
+lint:
 	@printf "$(BLUE)Checking linting...\n$(NC)"
 	@$(UV_RUN) ruff check agents/ env/ evaluation/ players/ train/ main/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting passed\n"
@@ -73,7 +70,7 @@ lint: ## Check code linting with Ruff
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting passed\n"
 	@printf "\n"
 
-format: ## Format code with Ruff
+format:
 	@printf "$(BLUE)Fixing linting...\n$(NC)"
 	@$(UV_RUN) ruff check --fix agents/ env/ evaluation/ players/ train/ main/
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Linting fixed\n"
@@ -82,39 +79,39 @@ format: ## Format code with Ruff
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Formatting complete\n"
 	@printf "\n"
 
-train-cfr: ## Train OpenSpiel MCCFR agent
+train-cfr:
 	@printf "$(BLUE)Starting MCCFR training...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_cfr
 
-train-ac-pure: ## Train AC agent (pure A2C, no KL)
+train-ac-pure:
 	@printf "$(BLUE)Starting AC pure training...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_ac --name ac_pure --lambda-kl 0.0
 
-train-ac-kl: ## Train AC agent (A2C + KL regularization)
+train-ac-kl:
 	@printf "$(BLUE)Starting AC KL training...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_ac --name ac_kl --lambda-kl 0.5
 
-train-dqn-calling: ## Train Double DQN vs Calling Station
+train-dqn-calling:
 	@printf "$(BLUE)Starting DQN training vs calling station...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_dqn --name dqn_calling --opponent calling
 
-train-dqn-maniac: ## Train Double DQN vs Maniac
+train-dqn-maniac:
 	@printf "$(BLUE)Starting DQN training vs maniac...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_dqn --name dqn_maniac --opponent maniac
 
-train-dqn-omc: ## Train Double DQN vs Old Man Coffee
+train-dqn-omc:
 	@printf "$(BLUE)Starting DQN training vs old man coffee...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_dqn --name dqn_omc --opponent omc
 
-train-dqn-polar: ## Train Double DQN vs Polarizing
+train-dqn-polar:
 	@printf "$(BLUE)Starting DQN training vs polarizing...\n$(NC)\n"
 	@$(UV_RUN) python -m train.train_dqn --name dqn_polar --opponent polar
 
-evaluate-sessions: ## Evaluate agent adaptation over hands (multi-session with CI bands)
+evaluate-sessions:
 	@printf "$(BLUE)Running session evaluation...\n$(NC)\n"
 	@$(UV_RUN) python -m evaluation.evaluate_sessions $(ARGS)
 
-pack-models: ## Compress models/ into models.tar.gz for git
+pack-models:
 	@printf "$(BLUE)Packing models...\n$(NC)"
 	@if [ -d models ] && [ "$$(find models \( -name '*.pkl' -o -name '*.pt' \) 2>/dev/null | head -1)" ]; then \
 		tar -czf $(MODELS_ARCHIVE) models/; \
@@ -124,7 +121,7 @@ pack-models: ## Compress models/ into models.tar.gz for git
 	fi
 	@printf "\n"
 
-unpack-models: ## Extract models.tar.gz into models/
+unpack-models:
 	@printf "$(BLUE)Unpacking models...\n$(NC)"
 	@if [ -f $(MODELS_ARCHIVE) ]; then \
 		tar -xzf $(MODELS_ARCHIVE); \
@@ -134,7 +131,7 @@ unpack-models: ## Extract models.tar.gz into models/
 	fi
 	@printf "\n"
 
-clean-models: ## Remove model weights (keeps .tar.gz)
+clean-models:
 	@printf "$(YELLOW)Cleaning model weights...\n$(NC)"
 	@find models \( -name '*.pkl' -o -name '*.pt' \) -delete 2>/dev/null || true
 	@printf "  $(GREEN)$(CHECKMARK)$(NC) Model weights removed\n"
@@ -156,11 +153,11 @@ $(MATCHUPS):
 	echo "Running $$a vs $$o"; \
 	AGENT=$$a OPPONENT=$$o $(UV_RUN) $(PYTHON)
 
-matchup: ## Run one matchup, e.g. make matchup AGENT=dqn-calling OPPONENT=maniac
+matchup:
 	@echo "Running $(AGENT) vs $(OPPONENT)"; \
 	AGENT=$(AGENT) OPPONENT=$(OPPONENT) $(UV_RUN) $(PYTHON)
 
-all: ## Run all agents against all opponents
+all:
 	@ALL=1 $(UV_RUN) $(PYTHON)
 
 $(SESSION_MATCHUPS):
@@ -170,7 +167,7 @@ $(SESSION_MATCHUPS):
 	echo "Running sessions: $$a vs $$o"; \
 	$(UV_RUN) $(SESSIONS) --agents $$a --opponent $$o
 
-sessions-all: ## Run session evaluation for all agents against all opponents
+sessions-all:
 	@for o in $(OPPONENTS); do \
 		echo "Running sessions vs $$o"; \
 		$(UV_RUN) $(SESSIONS) --agents $(AGENTS) --opponent $$o; \
