@@ -10,16 +10,16 @@ from rlcard.games.base import Card
 
 from env.state import State
 
-_CARD2INDEX: dict[str, int] | None = None
+CARD_TO_INDEX: dict[str, int] | None = None
 
 
-def _get_card2index() -> dict[str, int]:
-    global _CARD2INDEX
-    if _CARD2INDEX is None:
+def get_rlcard_card_to_index_mapping() -> dict[str, int]:
+    global CARD_TO_INDEX
+    if CARD_TO_INDEX is None:
         path = os.path.join(rlcard.__path__[0], "games/limitholdem/card2index.json")
         with open(path) as f:
-            _CARD2INDEX = json.load(f)
-    return _CARD2INDEX
+            CARD_TO_INDEX = json.load(f)
+    return CARD_TO_INDEX
 
 
 def build_features(state: State, device: str = "cpu") -> torch.Tensor:
@@ -36,7 +36,7 @@ def encode_both_hands_onehot(
     hand_1: Sequence[Card],
     device: str = "cpu",
 ) -> torch.Tensor:
-    c2i = _get_card2index()
+    c2i = get_rlcard_card_to_index_mapping()
     vec = torch.zeros(104, device=device)
     for card in hand_0:
         key = card.suit + card.rank

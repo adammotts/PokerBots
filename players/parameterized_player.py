@@ -59,12 +59,12 @@ class ParameterizedPlayer(BasePlayer):
         self.pfr = min(pfr, vpip)
         self.aggression = aggression
         self.fold_to_raise = fold_to_raise
-        self._preflop = True
-        self._facing_raise = False
+        self.preflop = True
+        self.facing_raise = False
 
     def reset_hand(self) -> None:
-        self._preflop = True
-        self._facing_raise = False
+        self.preflop = True
+        self.facing_raise = False
 
     def act(self, state: State) -> int:
         legal = set(state.legal_actions.keys())
@@ -72,12 +72,12 @@ class ParameterizedPlayer(BasePlayer):
         noise = random.uniform(-0.05, 0.05)
         strength = min(max(strength + noise, 0.0), 1.0)
 
-        if self._preflop:
-            self._preflop = False
-            return self._preflop_action(strength, legal)
-        return self._postflop_action(legal)
+        if self.preflop:
+            self.preflop = False
+            return self.preflop_action(strength, legal)
+        return self.postflop_action(legal)
 
-    def _preflop_action(self, strength: float, legal: set[int]) -> int:
+    def preflop_action(self, strength: float, legal: set[int]) -> int:
         play_threshold = 1.0 - self.vpip
         raise_threshold = 1.0 - self.pfr
 
@@ -93,9 +93,9 @@ class ParameterizedPlayer(BasePlayer):
             return Action.CALL.value
         return Action.CHECK.value
 
-    def _postflop_action(self, legal: set[int]) -> int:
-        if self._facing_raise:
-            self._facing_raise = False
+    def postflop_action(self, legal: set[int]) -> int:
+        if self.facing_raise:
+            self.facing_raise = False
             if random.random() < self.fold_to_raise:
                 if Action.FOLD.value in legal:
                     return Action.FOLD.value
@@ -111,6 +111,6 @@ class ParameterizedPlayer(BasePlayer):
 
     def record_action(self, player_id: int, action_name: str) -> None:
         if action_name == "raise":
-            self._facing_raise = True
+            self.facing_raise = True
         if action_name in ("call", "check"):
-            self._preflop = False
+            self.preflop = False

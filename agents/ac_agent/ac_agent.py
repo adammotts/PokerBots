@@ -22,7 +22,7 @@ from agents.features import build_features, encode_both_hands_onehot
 from env.state import State
 
 
-def _compute_gae(
+def compute_gae(
     rewards: list[float],
     values: torch.Tensor,
     gamma: float = 1.0,
@@ -85,27 +85,27 @@ class ActorCriticAgent(BaseAgent):
             lr=lr,
         )
 
-        self._opp_hidden = self.opponent_lstm.init_hidden(device)
+        self.opponent_hidden = self.opponent_lstm.init_hidden(device)
 
-        self._hand_reward: float = 0.0
-        self._action_record: list[tuple[int, str]] = []
-        self._our_player_id: int = 0
+        self.hand_reward: float = 0.0
+        self.action_record: list[tuple[int, str]] = []
+        self.our_player_id: int = 0
 
-        self._collecting: bool = False
-        self._collect_steps: list[StepData] = []
-        self._current_opp_actions: list[int] = []
-        self._rollout: list[HandRollout] = []
-        self._opp_hidden_rollout_start: tuple[torch.Tensor, torch.Tensor] | None = None
+        self.collecting: bool = False
+        self.collect_steps: list[StepData] = []
+        self.current_opponent_actions: list[int] = []
+        self.rollout: list[HandRollout] = []
+        self.opponent_hidden_rollout_start: tuple[torch.Tensor, torch.Tensor] | None = None
 
     def reset_opponent_state(self) -> None:
-        self._opp_hidden = self.opponent_lstm.init_hidden(self.device)
+        self.opponent_hidden = self.opponent_lstm.init_hidden(self.device)
         self.reset_hand_state()
 
     def reset_hand_state(self) -> None:
-        self._action_record = []
+        self.action_record = []
 
-    def _get_opp_context(self) -> torch.Tensor:
-        return self._opp_hidden[0].squeeze(0)
+    def get_opponent_context(self) -> torch.Tensor:
+        return self.opponent_hidden[0].squeeze(0)
 
     def act(
         self,
@@ -115,13 +115,13 @@ class ActorCriticAgent(BaseAgent):
         action_record: list[tuple[int, str]] | None = None,
         both_hands: tuple[Sequence[Card], Sequence[Card]] | None = None,
     ) -> int:
-        self._our_player_id = state.player_id
+        self.our_player_id = state.player_id
 
         if action_record is not None:
-            self._action_record = action_record
+            self.action_record = action_record
 
         features = build_features(state, self.device).unsqueeze(0)
-        opp_context = self._get_opp_context()
+        opp_context = self.get_opponent_context()
 
         with torch.set_grad_enabled(training):
             logits = self.actor(features, opp_context)
@@ -135,11 +135,11 @@ class ActorCriticAgent(BaseAgent):
 
         if training:
             action = dist.sample()
-            if self._collecting and both_hands is not None:
+            if self.collecting and both_hands is not None:
                 both_onehot = encode_both_hands_onehot(
                     both_hands[0], both_hands[1], self.device
                 )
-                self._collect_steps.append(
+                self.collect_steps.append(
                     StepData(
                         features=features.detach().squeeze(0),
                         both_hands_onehot=both_onehot,
@@ -155,63 +155,63 @@ class ActorCriticAgent(BaseAgent):
 
     def observe(self, transition: Transition) -> None:
         if transition["done"]:
-            self._hand_reward = transition["reward"]
+            self.hand_reward = transition["reward"]
 
     def update(self) -> None:
         pass
 
     def set_opp_actions(self, opp_actions: list[int]) -> None:
-        self._current_opp_actions = opp_actions
+        self.current_opponent_actions = opp_actions
 
     def begin_collect(self) -> None:
-        self._collecting = True
-        self._rollout = []
-        self._collect_steps = []
-        self._current_opp_actions = []
-        self._opp_hidden_rollout_start = (
-            self._opp_hidden[0].detach().clone(),
-            self._opp_hidden[1].detach().clone(),
+        self.collecting = True
+        self.rollout = []
+        self.collect_steps = []
+        self.current_opponent_actions = []
+        self.opponent_hidden_rollout_start = (
+            self.opponent_hidden[0].detach().clone(),
+            self.opponent_hidden[1].detach().clone(),
         )
 
     def finish_hand_collect(self) -> None:
         went_to_showdown = not any(
-            action_str == "fold" for _, action_str in self._action_record
+            action_str == "fold" for _, action_str in self.action_record
         )
         summary = build_opponent_summary(
-            self._action_record,
-            self._our_player_id,
-            self._hand_reward,
+            self.action_record,
+            self.our_player_id,
+            self.hand_reward,
             went_to_showdown,
             self.device,
         )
-        self._rollout.append(
+        self.rollout.append(
             HandRollout(
-                steps=self._collect_steps,
-                reward=self._hand_reward,
+                steps=self.collect_steps,
+                reward=self.hand_reward,
                 hand_summary=summary.detach(),
-                opp_actions=list(self._current_opp_actions),
+                opp_actions=list(self.current_opponent_actions),
             )
         )
-        self._collect_steps = []
-        self._current_opp_actions = []
+        self.collect_steps = []
+        self.current_opponent_actions = []
         with torch.no_grad():
             summary_input = summary.unsqueeze(0).unsqueeze(0)
-            _, self._opp_hidden = self.opponent_lstm(summary_input, self._opp_hidden)
-        self._opp_hidden = (
-            self._opp_hidden[0].detach(),
-            self._opp_hidden[1].detach(),
+            _, self.opponent_hidden = self.opponent_lstm(summary_input, self.opponent_hidden)
+        self.opponent_hidden = (
+            self.opponent_hidden[0].detach(),
+            self.opponent_hidden[1].detach(),
         )
-        self._action_record = []
+        self.action_record = []
 
     def ppo_update(self) -> dict[str, float]:
-        rollout = self._rollout
-        if not rollout or self._opp_hidden_rollout_start is None:
-            self._collecting = False
+        rollout = self.rollout
+        if not rollout or self.opponent_hidden_rollout_start is None:
+            self.collecting = False
             return {}
 
         total_steps = sum(len(h.steps) for h in rollout)
         if total_steps == 0:
-            self._collecting = False
+            self.collecting = False
             return {}
 
         log_probs_old_t = torch.tensor(
@@ -230,8 +230,8 @@ class ActorCriticAgent(BaseAgent):
 
         for epoch in range(self.ppo_epochs):
             opp_hidden = (
-                self._opp_hidden_rollout_start[0].clone(),
-                self._opp_hidden_rollout_start[1].clone(),
+                self.opponent_hidden_rollout_start[0].clone(),
+                self.opponent_hidden_rollout_start[1].clone(),
             )
 
             all_log_probs_new: list[torch.Tensor] = []
@@ -269,7 +269,7 @@ class ActorCriticAgent(BaseAgent):
 
                 rewards = [0.0] * n_steps
                 rewards[-1] = hand.reward
-                advantages, returns = _compute_gae(
+                advantages, returns = compute_gae(
                     rewards, values.detach(), self.gamma, self.gae_lambda
                 )
                 all_advantages.append(advantages)
@@ -329,8 +329,8 @@ class ActorCriticAgent(BaseAgent):
 
             for _ in range(self.extra_critic_steps):
                 opp_h_extra = (
-                    self._opp_hidden_rollout_start[0].clone().detach(),
-                    self._opp_hidden_rollout_start[1].clone().detach(),
+                    self.opponent_hidden_rollout_start[0].clone().detach(),
+                    self.opponent_hidden_rollout_start[1].clone().detach(),
                 )
                 extra_values_list: list[torch.Tensor] = []
                 extra_returns_list: list[torch.Tensor] = []
@@ -348,7 +348,7 @@ class ActorCriticAgent(BaseAgent):
                     v = self.critic(sf, sbh, oc).squeeze(-1)
                     rewards = [0.0] * n
                     rewards[-1] = hand.reward
-                    _, ret = _compute_gae(
+                    _, ret = compute_gae(
                         rewards, v.detach(), self.gamma, self.gae_lambda
                     )
                     extra_values_list.append(v)
@@ -375,14 +375,14 @@ class ActorCriticAgent(BaseAgent):
                     "aux_loss": aux_loss.item(),
                 }
 
-        self._rollout = []
-        self._collecting = False
+        self.rollout = []
+        self.collecting = False
         return diagnostics
 
     def get_trial(self) -> list[HandRollout]:
-        trial = list(self._rollout)
-        self._rollout = []
-        self._collecting = False
+        trial = list(self.rollout)
+        self.rollout = []
+        self.collecting = False
         return trial
 
     def meta_ppo_update(self, trials: list[list[HandRollout]]) -> dict[str, float]:
@@ -445,7 +445,7 @@ class ActorCriticAgent(BaseAgent):
 
                     rewards = [0.0] * n_steps
                     rewards[-1] = hand.reward
-                    advantages, returns = _compute_gae(
+                    advantages, returns = compute_gae(
                         rewards, values.detach(), self.gamma, self.gae_lambda
                     )
                     all_advantages.append(advantages)
@@ -520,25 +520,25 @@ class ActorCriticAgent(BaseAgent):
         action_record: list[tuple[int, str]],
         payoff: float,
     ) -> None:
-        self._action_record = action_record
-        self._hand_reward = payoff
-        self._our_player_id = 0
+        self.action_record = action_record
+        self.hand_reward = payoff
+        self.our_player_id = 0
         with torch.no_grad():
-            self._step_opponent_lstm()
+            self.step_opponent_lstm()
 
-    def _step_opponent_lstm(self) -> None:
+    def step_opponent_lstm(self) -> None:
         went_to_showdown = not any(
-            action_str == "fold" for _, action_str in self._action_record
+            action_str == "fold" for _, action_str in self.action_record
         )
         summary = build_opponent_summary(
-            self._action_record,
-            self._our_player_id,
-            self._hand_reward,
+            self.action_record,
+            self.our_player_id,
+            self.hand_reward,
             went_to_showdown,
             self.device,
         )
         summary_input = summary.unsqueeze(0).unsqueeze(0)
-        _, self._opp_hidden = self.opponent_lstm(summary_input, self._opp_hidden)
+        _, self.opponent_hidden = self.opponent_lstm(summary_input, self.opponent_hidden)
 
     def save(self, path: str) -> None:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

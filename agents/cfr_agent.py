@@ -8,7 +8,7 @@ from open_spiel.python.algorithms import external_sampling_mccfr as es_mccfr
 from agents.base_agent import BaseAgent, Transition
 from env.state import State
 
-_GAME_PARAMS = {
+GAME_PARAMS = {
     "betting": "limit",
     "numPlayers": 2,
     "numRounds": 4,
@@ -22,7 +22,7 @@ _GAME_PARAMS = {
     "numBoardCards": "0 3 1 1",
 }
 
-_RANK_TO_IDX = {
+RANK_TO_INDEX = {
     "2": 0,
     "3": 1,
     "4": 2,
@@ -37,18 +37,18 @@ _RANK_TO_IDX = {
     "K": 11,
     "A": 12,
 }
-_SUIT_TO_IDX = {"C": 0, "D": 1, "H": 2, "S": 3}
+SUIT_TO_INDEX = {"C": 0, "D": 1, "H": 2, "S": 3}
 
-_RLCARD_ACTION_TO_OS = {"fold": 0, "call": 1, "check": 1, "raise": 2}
+RLCARD_ACTION_TO_OS = {"fold": 0, "call": 1, "check": 1, "raise": 2}
 
-_OS_TO_RLCARD = {0: [2], 1: [0, 3], 2: [1]}
+OS_TO_RLCARD = {0: [2], 1: [0, 3], 2: [1]}
 
 
-def _rlcard_card_to_os_action(card: str) -> int:
+def rlcard_card_to_os_action(card: str) -> int:
     """Convert RLCard card (e.g. 'HQ', 'DA') to OpenSpiel deal action ID."""
-    suit_idx = _SUIT_TO_IDX[card[0]]
-    rank_idx = _RANK_TO_IDX[card[1:]]
-    return rank_idx * 4 + suit_idx
+    suit_index = SUIT_TO_INDEX[card[0]]
+    rank_index = RANK_TO_INDEX[card[1:]]
+    return rank_index * 4 + suit_index
 
 
 class CFRAgent(BaseAgent):
@@ -61,9 +61,9 @@ class CFRAgent(BaseAgent):
     def __init__(self, iterations: int = 1000) -> None:
         self.iterations = iterations
         self.total_iterations: int = 0
-        self._game = pyspiel.load_game("universal_poker", _GAME_PARAMS)
-        self._solver = es_mccfr.ExternalSamplingSolver(self._game)
-        self._avg_policy: es_mccfr.AveragePolicy | None = None
+        self.game = pyspiel.load_game("universal_poker", GAME_PARAMS)
+        self.solver = es_mccfr.ExternalSamplingSolver(self.game)
+        self.avg_policy: es_mccfr.AveragePolicy | None = None
 
     def act(
         self,
@@ -75,21 +75,21 @@ class CFRAgent(BaseAgent):
         if state.raw_obs is None:
             return int(np.random.choice(state.legal_actions))
 
-        if self._avg_policy is None:
-            self._avg_policy = self._solver.average_policy()
+        if self.avg_policy is None:
+            self.avg_policy = self.solver.average_policy()
 
-        os_state = self._build_info_state(
+        os_state = self.build_info_state(
             state.raw_obs, action_record or [], state.player_id
         )
         try:
-            probs = self._avg_policy.action_probabilities(os_state)
+            probs = self.avg_policy.action_probabilities(os_state)
         except (IndexError, KeyError, pyspiel.SpielError):
             return int(np.random.choice(state.legal_actions))
 
         legal_set = set(state.legal_actions.keys())
         prob_array = np.zeros(4)
         for os_action, prob in probs.items():
-            for rl_action in _OS_TO_RLCARD[os_action]:
+            for rl_action in OS_TO_RLCARD[os_action]:
                 if rl_action in legal_set:
                     prob_array[rl_action] += prob
 
@@ -110,9 +110,9 @@ class CFRAgent(BaseAgent):
 
     def update(self) -> None:
         for _ in range(self.iterations):
-            self._solver.iteration()
+            self.solver.iteration()
             self.total_iterations += 1
-        self._avg_policy = None
+        self.avg_policy = None
 
     def save(self, path: str) -> None:
         os.makedirs(path, exist_ok=True)
@@ -122,7 +122,7 @@ class CFRAgent(BaseAgent):
             p = pickle.Pickler(f, protocol=pickle.HIGHEST_PROTOCOL)
             p.fast = True
             p.dump(self.total_iterations)
-            for key, val in self._solver._infostates.items():
+            for key, val in self.solver._infostates.items():
                 p.dump((key, val))
             p.dump(None)
         os.replace(tmp, final)
@@ -142,15 +142,15 @@ class CFRAgent(BaseAgent):
                         break
                     key, val = item
                     infostates[key] = val
-            self._solver._infostates = infostates
+            self.solver._infostates = infostates
         except (EOFError, pickle.UnpicklingError) as e:
             print(
                 f"[OpenSpielCFRAgent] Warning: checkpoint corrupt ({e}), starting fresh"
             )
             return
-        self._avg_policy = None
+        self.avg_policy = None
 
-    def _build_info_state(
+    def build_info_state(
         self,
         raw_obs: dict[str, object],
         action_record: list[tuple[int, str]],
@@ -163,10 +163,10 @@ class CFRAgent(BaseAgent):
         community cards between betting rounds. Opponent's cards don't
         affect our info state, so we deal arbitrary unused cards for them.
         """
-        state = self._game.new_initial_state()
+        state = self.game.new_initial_state()
 
-        our_cards = [_rlcard_card_to_os_action(c) for c in raw_obs["hand"]]
-        public_cards = [_rlcard_card_to_os_action(c) for c in raw_obs["public_cards"]]
+        our_cards = [rlcard_card_to_os_action(c) for c in raw_obs["hand"]]
+        public_cards = [rlcard_card_to_os_action(c) for c in raw_obs["public_cards"]]
         used = set(our_cards + public_cards)
 
         dummy_opp = [i for i in range(52) if i not in used][:2]
@@ -179,21 +179,21 @@ class CFRAgent(BaseAgent):
         for card_action in deal_order:
             state.apply_action(card_action)
 
-        public_idx = 0
-        action_idx = 0
+        public_index = 0
+        action_index = 0
         while not state.is_terminal():
             if state.is_chance_node():
-                if public_idx < len(public_cards):
-                    state.apply_action(public_cards[public_idx])
-                    public_idx += 1
+                if public_index < len(public_cards):
+                    state.apply_action(public_cards[public_index])
+                    public_index += 1
                 else:
                     break
             elif state.current_player() < 0:
                 break
-            elif action_idx < len(action_record):
-                _, action_str = action_record[action_idx]
-                action_idx += 1
-                os_action = _RLCARD_ACTION_TO_OS.get(action_str, 1)
+            elif action_index < len(action_record):
+                _, action_str = action_record[action_index]
+                action_index += 1
+                os_action = RLCARD_ACTION_TO_OS.get(action_str, 1)
                 if os_action in state.legal_actions():
                     state.apply_action(os_action)
                 else:

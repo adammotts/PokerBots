@@ -19,7 +19,7 @@ from agents.dqn_agent.replay import EpisodeReplayBuffer, StepExperience
 from env.state import State
 
 
-def _detach_hidden(
+def detach_hidden(
     hidden: tuple[torch.Tensor, torch.Tensor],
 ) -> tuple[torch.Tensor, torch.Tensor]:
     return hidden[0].detach(), hidden[1].detach()
@@ -61,8 +61,8 @@ class DoubleDQNAgent(BaseAgent):
         self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=lr)
         self.replay = EpisodeReplayBuffer(capacity=replay_capacity)
 
-        self._game_hidden: tuple[torch.Tensor, torch.Tensor] | None = None
-        self._current_episode: list[StepExperience] = []
+        self.game_hidden: tuple[torch.Tensor, torch.Tensor] | None = None
+        self.current_episode: list[StepExperience] = []
         self.training_hands = 0
         self.training_steps = 0
 
@@ -72,8 +72,8 @@ class DoubleDQNAgent(BaseAgent):
         return self.epsilon_start + progress * (self.epsilon_end - self.epsilon_start)
 
     def reset_hand_state(self) -> None:
-        self._game_hidden = None
-        self._current_episode = []
+        self.game_hidden = None
+        self.current_episode = []
 
     def build_features(self, state: State) -> torch.Tensor:
         return build_dqn_features(state, self.device)
@@ -86,13 +86,13 @@ class DoubleDQNAgent(BaseAgent):
         action_record: list[tuple[int, str]] | None = None,
     ) -> int:
         del action_record
-        if self._game_hidden is None:
-            self._game_hidden = self.q_network.init_hidden(self.device)
+        if self.game_hidden is None:
+            self.game_hidden = self.q_network.init_hidden(self.device)
 
         features = self.build_features(state).unsqueeze(0)
         with torch.no_grad():
-            q_values, hidden_new = self.q_network(features, self._game_hidden)
-        self._game_hidden = _detach_hidden(hidden_new)
+            q_values, hidden_new = self.q_network(features, self.game_hidden)
+        self.game_hidden = detach_hidden(hidden_new)
 
         legal_actions = list(state.legal_actions.keys())
         if training and random.random() < self.epsilon:
@@ -106,7 +106,7 @@ class DoubleDQNAgent(BaseAgent):
         return int(masked_q.argmax().item())
 
     def observe(self, transition: Transition) -> None:
-        self._current_episode.append(
+        self.current_episode.append(
             StepExperience(
                 obs=np.asarray(transition["obs"], dtype=np.float32),
                 action=transition["action"],
@@ -116,7 +116,7 @@ class DoubleDQNAgent(BaseAgent):
             )
         )
         if transition["done"]:
-            self.replay.add_episode(self._current_episode)
+            self.replay.add_episode(self.current_episode)
             self.training_hands += 1
             self.reset_hand_state()
 
@@ -147,7 +147,7 @@ class DoubleDQNAgent(BaseAgent):
                     _, target_hidden_after = self.target_network(obs, target_hidden)
 
                     online_next_q, _ = self.q_network(
-                        next_obs, _detach_hidden(online_hidden_after)
+                        next_obs, detach_hidden(online_hidden_after)
                     )
                     next_legal_mask = next_obs[
                         0, LEGAL_ACTION_START : LEGAL_ACTION_START + LEGAL_ACTION_DIM
@@ -169,7 +169,7 @@ class DoubleDQNAgent(BaseAgent):
 
                 episode_losses.append(F.smooth_l1_loss(q_selected, target_tensor))
                 online_hidden = online_hidden_after
-                target_hidden = _detach_hidden(target_hidden_after)
+                target_hidden = detach_hidden(target_hidden_after)
 
             if episode_losses:
                 losses.append(torch.stack(episode_losses).mean())

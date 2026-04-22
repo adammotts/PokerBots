@@ -20,14 +20,14 @@ class EpisodeReplayBuffer:
     """Replay buffer that stores complete hands for recurrent training."""
 
     def __init__(self, capacity: int) -> None:
-        self._episodes: deque[list[StepExperience]] = deque(maxlen=capacity)
+        self.episodes: deque[list[StepExperience]] = deque(maxlen=capacity)
 
     def __len__(self) -> int:
-        return len(self._episodes)
+        return len(self.episodes)
 
     def add_episode(self, episode: list[StepExperience]) -> None:
         if episode:
-            self._episodes.append(episode)
+            self.episodes.append(episode)
 
     def sample(self, batch_size: int) -> list[list[StepExperience]]:
-        return random.sample(self._episodes, k=min(batch_size, len(self._episodes)))
+        return random.sample(self.episodes, k=min(batch_size, len(self.episodes)))

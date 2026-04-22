@@ -10,7 +10,7 @@ from env.state import State
 from players.base_player import BasePlayer
 
 
-def _build_agent_features(agent: BaseAgent, state: State) -> np.ndarray:
+def build_agent_features(agent: BaseAgent, state: State) -> np.ndarray:
     builder = getattr(agent, "build_features", None)
     if callable(builder):
         return builder(state).cpu().numpy()
@@ -47,7 +47,7 @@ def play_hand(
                         obs=pending_obs,
                         action=pending_action,
                         reward=0.0,
-                        next_obs=_build_agent_features(agent, state),
+                        next_obs=build_agent_features(agent, state),
                         done=False,
                     )
                 )
@@ -58,7 +58,7 @@ def play_hand(
                 action_record=action_record,
                 both_hands=both_hands,
             )
-            pending_obs = _build_agent_features(agent, state)
+            pending_obs = build_agent_features(agent, state)
             pending_action = action
         else:
             action = opponent.act(state)
@@ -79,7 +79,7 @@ def play_hand(
                 obs=pending_obs,
                 action=pending_action,
                 reward=agent_payoff,
-                next_obs=_build_agent_features(agent, state),
+                next_obs=build_agent_features(agent, state),
                 done=True,
             )
         )
